@@ -1,0 +1,304 @@
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f172a;--card:#1e293b;--panel:#334155;--text:#f1f5f9;
+  --muted:#cbd5e1;--accent:#3b82f6;--danger:#ef4444;--ok:#10b981;
+  --warn:#f59e0b;--border:#475569;--shadow:rgba(0,0,0,.3)
+}
+
+body{font-family:Inter,Segoe UI,system-ui,Arial;background:var(--bg);color:var(--text);padding:18px;min-height:100vh}
+.container{max-width:1200px;margin:0 auto}
+
+header{display:flex;align-items:center;justify-content:space-between;padding:18px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#10b981);box-shadow:0 18px 40px var(--shadow);margin-bottom:18px}
+h1{font-size:1.2rem}
+
+.home-btn{
+  position:fixed;top:15px;left:15px;
+  background:linear-gradient(135deg,var(--accent),#2563eb);
+  color:#fff;text-decoration:none;font-size:24px;
+  width:45px;height:45px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 12px rgba(0,0,0,0.5);
+  z-index:9999;border:1px solid var(--border);
+  transition:transform .2s
+}
+.home-btn:hover{transform:scale(1.1);filter:brightness(1.1)}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:18px;margin-bottom:18px}
+.card{background:var(--card);padding:16px;border-radius:12px;border:1px solid var(--border);box-shadow:0 8px 30px var(--shadow);margin-bottom:18px}
+h2{color:var(--accent);margin-bottom:8px;font-size:1.05rem}
+.input-group{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+input[type="text"],input[type="number"],input[type="time"],select,textarea{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:#0b1220;color:var(--text)}
+textarea{width:100%;min-height:90px;resize:vertical;font-family:inherit}
+.btn{padding:10px 14px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
+.btn-add{background:linear-gradient(135deg,var(--accent),#2563eb);color:#fff}
+.btn-del{background:linear-gradient(135deg,var(--danger),#dc2626);color:#fff;padding:8px 10px}
+.btn-plan{background:linear-gradient(135deg,var(--accent),#10b981);color:#fff;width:100%;padding:12px 18px;margin:12px 0;border-radius:10px}
+.small{font-size:.85rem;color:var(--muted)}
+.stat{margin-top:10px;padding:10px;border-radius:8px;background:linear-gradient(180deg,var(--panel),#151925);border-left:4px solid var(--accent);color:var(--muted)}
+.table{width:100%;border-collapse:collapse;margin-top:12px}
+.table th{background:linear-gradient(135deg,var(--warn),#f97316);color:#fff;padding:10px;text-align:left;font-size:.85rem}
+.table td{padding:10px;border-bottom:1px solid var(--border);background:var(--panel);color:var(--text);font-size:.9rem}
+
+.warning{background:rgba(239,68,68,0.08);border-left:4px solid var(--danger);padding:12px;border-radius:8px;color:var(--danger);font-weight:600;margin-top:12px}
+.note{background:rgba(16,185,129,0.06);border-left:4px solid var(--ok);padding:10px;border-radius:8px;color:var(--ok);margin-top:12px;font-weight:600}
+.footer-warning{background:rgba(15,23,42,0.92);border-left:4px solid var(--border);padding:12px;border-radius:8px;color:var(--muted);font-weight:700;margin-top:14px}
+.capacity-info{background:rgba(59,130,246,0.08);border-left:4px solid var(--accent);padding:12px;border-radius:8px;color:var(--accent);font-weight:600;margin-top:12px}
+.attention{background:rgba(245,158,11,0.08);border-left:4px solid var(--warn);padding:12px;border-radius:8px;color:var(--warn);font-weight:600;margin-top:12px}
+
+.collapsible{background:var(--card);border-radius:12px;border:1px solid var(--border);box-shadow:0 8px 30px var(--shadow);margin-bottom:14px;overflow:hidden}
+.collapsible > summary{padding:14px 16px;cursor:pointer;font-weight:600;color:var(--accent);list-style:none;display:flex;align-items:center;justify-content:space-between;font-size:1.02rem}
+.collapsible > summary::-webkit-details-marker{display:none}
+.collapsible > summary::after{content:"▼";font-size:.75em;transition:transform .2s;color:var(--muted)}
+.collapsible[open] > summary::after{transform:rotate(180deg)}
+.collapsible > .body{padding:8px 16px 16px 16px;border-top:1px solid var(--border)}
+
+.mode-row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.mode-row label{display:flex;align-items:center;gap:6px;cursor:pointer;background:var(--panel);padding:8px 12px;border-radius:8px;border:1px solid var(--border)}
+.mode-row label.active{border-color:var(--accent);background:rgba(59,130,246,0.15);color:var(--accent)}
+
+.role-select{flex:0 0 auto;max-width:140px;padding:8px}
+.open-toggle{flex:0 0 auto;display:flex;align-items:center;gap:5px;background:rgba(245,158,11,.12);border:1px solid var(--warn);color:#fcd34d;border-radius:8px;padding:8px 10px;font-size:.8rem;font-weight:700;white-space:nowrap}
+.open-toggle input{accent-color:#f59e0b}
+.role-tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:.7rem;font-weight:700;margin-left:6px;letter-spacing:.02em}
+.role-tag.supervisor{background:rgba(59,130,246,0.18);color:#93c5fd;border:1px solid #3b82f6}
+.role-tag.qualified{background:rgba(16,185,129,0.18);color:#6ee7b7;border:1px solid #10b981}
+.role-tag.regular{background:rgba(148,163,184,0.18);color:#cbd5e1;border:1px solid #64748b}
+.role-tag.head{background:rgba(245,158,11,0.18);color:#fcd34d;border:1px solid #f59e0b}
+
+body.mode-all .group-only{display:none !important}
+body.mode-group .all-only{display:none !important}
+
+/* ==========================================================
+   👷 TEKNİSYENLERİN PROGRAMI – YENİ 2 SÜTUNLU TASARIM
+   Teknisyen ismi başlık olarak işin üstüne, yanında Toplam (saat)
+   ========================================================== */
+.tech-program-block{
+  background:#1f2d40;
+  border:1px solid rgba(148,163,184,.18);
+  border-left:4px solid rgba(59,130,246,.75);
+  border-radius:10px;
+  padding:10px 12px;
+  margin-bottom:10px;
+}
+.tech-program-block:nth-child(even){background:#253449}
+.tech-program-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding-bottom:6px;
+  margin-bottom:6px;
+  border-bottom:1px solid rgba(148,163,184,.22);
+  flex-wrap:wrap;
+}
+.tech-program-header-left{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+  min-width:0;
+}
+.tech-program-name{
+  font-weight:800;
+  font-size:.95rem;
+  color:#f1f5f9;
+  word-break:break-word;
+}
+.tech-program-total{
+  font-size:.78rem;
+  font-weight:700;
+  color:#cbd5e1;
+  white-space:nowrap;
+  background:rgba(15,23,42,.5);
+  padding:3px 8px;
+  border-radius:6px;
+  border:1px solid rgba(148,163,184,.2);
+}
+.tech-program-total strong{color:#e2e8f0}
+
+/* Program rows: tek satır - İş + zaman aralığı */
+.program-table{display:flex;flex-direction:column;gap:4px;margin-top:0}
+
+.program-seg{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding:5px 8px;
+  border-radius:6px;
+  background:rgba(15,23,42,.28);
+  border:1px solid rgba(148,163,184,.14);
+  line-height:1.25;
+  flex-wrap:nowrap;
+  white-space:nowrap;
+  overflow:hidden;
+}
+.program-task{
+  flex:1 1 auto;
+  min-width:0;
+  font-size:.82rem;
+  font-weight:600;
+  color:#f1f5f9;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.program-time{
+  flex:0 0 auto;
+  white-space:nowrap;
+  color:#e2e8f0;
+  font-weight:800;
+  text-align:right;
+  font-size:.82rem;
+  letter-spacing:.01em;
+}
+.program-meta-line{
+  font-size:.7rem;
+  margin-top:2px;
+  padding:2px 8px;
+  word-break:break-word;
+  white-space:normal;
+}
+.program-role-tag{
+  display:inline-flex;
+  align-items:center;
+  white-space:nowrap;
+  font-size:.62rem;
+  line-height:1;
+  padding:3px 6px;
+  margin-left:0;
+  border-radius:5px;
+}
+.program-empty{
+  font-style:italic;
+  color:var(--danger);
+  font-size:.82rem;
+  padding:4px 8px;
+}
+
+/* ==========================================================
+   👑 B1 TEKNİSYEN ZAMAN LİSTESİ
+   Tek satırda iş + zaman; B1-only / OPEN fill alt satırda
+   ========================================================== */
+.b1-list{margin-top:8px}
+.b1-list .b1-row{
+  background:var(--panel);
+  padding:6px 10px;
+  border-radius:8px;
+  margin-bottom:5px;
+  border-left:4px solid var(--warn);
+  display:block;
+}
+.b1-list .b1-row.b1-only{border-left-color:var(--accent)}
+.b1-main-line{
+  display:flex;
+  justify-content:space-between;
+  gap:8px;
+  align-items:center;
+  width:100%;
+  flex-wrap:nowrap;
+  white-space:nowrap;
+  overflow:hidden;
+}
+.b1-list .b1-row .b1-task{
+  flex:1 1 auto;
+  min-width:0;
+  font-weight:700;
+  font-size:.82rem;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.b1-list .b1-row .b1-time{
+  flex:0 0 auto;
+  font-size:.82rem;
+  font-weight:800;
+  color:#e2e8f0;
+  white-space:nowrap;
+}
+/* B1-only / OPEN fill etiketi alt satıra in */
+.b1-meta-line{
+  margin-top:4px;
+  display:block;
+}
+.b1-list .b1-row .b1-only-tag{
+  display:inline-block;
+  background:rgba(59,130,246,.18);
+  color:#93c5fd;
+  padding:2px 8px;
+  border-radius:6px;
+  font-size:.7rem;
+  margin-left:0;
+}
+
+.cov-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.cov-list .cov-row{display:flex;align-items:center;gap:10px;background:var(--panel);padding:8px 12px;border-radius:8px;border-left:4px solid var(--accent)}
+
+.table th:nth-child(1), .table td:nth-child(1) { width: 22%; }
+.table th:nth-child(2), .table td:nth-child(2) { width: 63%; }
+.table th:nth-child(3), .table td:nth-child(3) { width: 15%; }
+
+@media(max-width:640px){
+  .home-btn{width:36px;height:36px;font-size:18px;top:10px;left:10px}
+  header{flex-direction:column;gap:10px}
+  h1{font-size:1rem}
+  .input-group:not(#tasks .input-group):not(#techs .input-group){flex-wrap:wrap}
+  #techs .input-group{flex-wrap:nowrap}
+  #tasks .input-group{
+    display:grid;
+    grid-template-columns:minmax(165px,1fr) 52px 38px 30px;
+    gap:5px;
+    align-items:center;
+  }
+  .input-group label{width:100%;margin-bottom:4px;flex-basis:100%}
+  .input-group input[type="time"]{flex-basis:100px;flex-grow:1}
+  #tasks .input-group input[type="text"]{width:100%;min-width:0;font-size:.92rem;padding:10px 8px}
+  #tasks .input-group input[type="number"]{width:52px;min-width:52px;font-size:.82rem;padding:10px 4px;text-align:center}
+  #tasks .input-group .open-toggle{
+    width:38px !important;min-width:38px;height:40px;flex-basis:auto !important;
+    margin:0;padding:3px 2px;gap:1px;font-size:.48rem;line-height:1;
+    border-radius:6px;letter-spacing:-.04em;flex-direction:column;
+    justify-content:center;overflow:hidden;
+  }
+  #tasks .input-group .open-toggle input{width:12px;height:12px;min-width:12px;margin:0}
+  #tasks .input-group .btn-del{width:30px;min-width:30px;padding:8px 0}
+  .role-select{max-width:110px;font-size:.85rem}
+  .table{font-size:.8rem}
+  .table th, .table td{padding:6px 4px}
+  .table th:nth-child(1), .table td:nth-child(1){width:25%;word-break:break-word}
+  .table th:nth-child(2), .table td:nth-child(2){width:60%;word-break:break-word}
+  .table th:nth-child(3), .table td:nth-child(3){width:15%;text-align:center;font-size:.75rem}
+
+  /* Mobilde tek satıra sığması için yazılar daha küçük */
+  .tech-program-block{padding:8px 10px}
+  .tech-program-name{font-size:.88rem}
+  .tech-program-total{font-size:.72rem;padding:2px 6px}
+  .program-seg{padding:4px 7px;gap:6px}
+  .program-task{font-size:.74rem}
+  .program-time{font-size:.74rem}
+  .program-role-tag{font-size:.58rem;padding:2px 5px}
+  .program-meta-line{font-size:.64rem}
+
+  .b1-list .b1-row{padding:5px 9px}
+  .b1-list .b1-row .b1-task{font-size:.74rem}
+  .b1-list .b1-row .b1-time{font-size:.74rem}
+  .b1-list .b1-row .b1-only-tag{font-size:.62rem;padding:2px 6px}
+}
+
+@media(max-width:380px){
+  #tasks .input-group{
+    grid-template-columns:minmax(150px,1fr) 46px 34px 28px;gap:4px;
+  }
+  #tasks .input-group input[type="text"]{font-size:.88rem;padding:9px 6px}
+  #tasks .input-group input[type="number"]{width:46px;min-width:46px;font-size:.74rem;padding:9px 3px}
+  #tasks .input-group .open-toggle{width:34px !important;min-width:34px;height:38px;font-size:.43rem;padding:2px 1px;gap:1px}
+  #tasks .input-group .open-toggle input{width:11px;height:11px;min-width:11px}
+  #tasks .input-group .btn-del{width:28px;min-width:28px}
+  .role-select{max-width:90px;font-size:.8rem;padding:6px}
+
+  /* Çok dar ekranda ekstra küçültme */
+  .program-task{font-size:.7rem}
+  .program-time{font-size:.7rem}
+  .b1-list .b1-row .b1-task{font-size:.7rem}
+  .b1-list .b1-row .b1-time{font-size:.7rem}
+}

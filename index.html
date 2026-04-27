@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Uçak Bakım İş Planlama Sistemi – v21.9</title>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body class="mode-all">
+<a href="https://ovarthy-bot.github.io/navigasyon/" class="home-btn" title="Ana Sayfaya Git">🏠</a>
+<div class="container" id="container">
+  <header>
+    <h1>✈️ Adam Saat Dağıtma Uygulaması – v21.9</h1>
+    <div class="small">|Geliştirici: ovar@thy.com|</div>
+  </header>
+
+  <!-- Çalışma Modu (collapsed) -->
+  <details class="collapsible" id="modeDetails">
+    <summary>⚙️ Çalışma Sistemi <span class="small" id="modeSummaryNote" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
+    <div class="body">
+      <div class="mode-row" id="modeRow">
+        <label data-mode="all"><input type="radio" name="planMode" value="all"> Supervisor ALL <span class="small" style="margin-left:6px">(Tek B1 onaylı klasik mod)</span></label>
+        <label data-mode="group"><input type="radio" name="planMode" value="group"> Supervisor Grup <span class="small" style="margin-left:6px">(Çoklu süpervizör + Kalifiyeli + Teknisyen)</span></label>
+      </div>
+      <div class="small" id="modeDescription" style="margin-top:8px;color:var(--muted)"></div>
+    </div>
+  </details>
+
+  <div class="grid">
+    <div class="card">
+      <h2>📋 İşler</h2>
+      <div id="tasks"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-add" id="addTask">+ İş Ekle</button>
+        <button class="btn" id="resetTasks" style="background:#111;border:1px solid var(--border);color:var(--muted)">Reset</button>
+      </div>
+      <div id="tasksStat" class="stat"></div>
+      <div id="dupeWarn"></div>
+    </div>
+
+    <div class="card">
+      <h2>👷 Teknisyenler</h2>
+      <div id="techs"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-add" id="addTech">+ Teknisyen Ekle</button>
+        <button class="btn" id="resetTechs" style="background:#111;border:1px solid var(--border);color:var(--muted)">Reset</button>
+      </div>
+      <div id="techsStat" class="stat"></div>
+    </div>
+  </div>
+
+  <!-- Vardiya & Mola (collapsed) -->
+  <details class="collapsible" id="shiftDetails">
+    <summary>🕒 Vardiya &amp; Yemek Molası <span class="small" id="shiftSummary" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
+    <div class="body">
+      <div class="input-group"><label style="width:130px">Vardiya Başlangıç</label><input type="time" id="shiftStart"></div>
+      <div class="input-group"><label style="width:130px">Vardiya Bitiş</label><input type="time" id="shiftEnd"></div>
+      <div class="input-group"><label style="width:130px">Yemek Molası</label>
+        <input type="time" id="breakStart"><input type="time" id="breakEnd">
+        <button class="btn" id="clearBreak" style="background:#111;color:var(--muted);border:1px solid var(--border)">Temizle</button>
+      </div>
+    </div>
+  </details>
+
+  <!-- B1 Teknisyen Ayarları (collapsed) - sadece all modunda -->
+  <details class="collapsible" id="b1Details">
+    <summary>👑 B1 Teknisyen Ayarları <span class="small" id="b1Summary" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
+    <div class="body">
+      <div class="input-group"><label style="width:130px">B1 Teknisyen</label><input type="text" id="headTech" placeholder="B1 Teknisyen"></div>
+      <hr style="border-color:var(--border);margin:12px 0;">
+      <label class="small" style="color:var(--muted)">B1 Teknisyen Dolu Saatleri (Opsiyonel)</label>
+      <div id="headBlocks" style="margin-top:8px;"></div>
+      <button class="btn btn-add" id="addHeadBlock" style="padding:8px 12px;font-size:0.9rem;">+ B1 Dolu Saat Ekle</button>
+    </div>
+  </details>
+
+  <!-- Teknisyen Dolu Saatleri (collapsed) -->
+  <details class="collapsible" id="busyDetails">
+    <summary>⛔ Teknisyen Dolu Saatleri (Opsiyonel) <span class="small" id="busySummary" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
+    <div class="body">
+      <div class="input-group">
+        <select id="techBlockSelect"></select>
+        <input type="time" id="techBlockStart">
+        <input type="time" id="techBlockEnd">
+        <button class="btn btn-add" id="addTechBlock" style="padding:8px 12px;font-size:0.9rem;">+ Ekle</button>
+      </div>
+      <div id="techBlocks" style="margin-top:8px;"></div>
+    </div>
+  </details>
+
+  <div id="results"></div>
+
+  <div class="card">
+    <button class="btn-plan" id="planBtn">🚀 İş Planını Oluştur (v21.9)</button>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
