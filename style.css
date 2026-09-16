@@ -209,7 +209,24 @@ body.mode-group .all-only { display: none !important; }
   
   .tech-program-header { flex-direction: column; align-items: flex-start; }
   .btn-wa-copy { width: 100%; justify-content: center; padding: 0.75rem; font-size: 0.95rem; }
+  .btn-wa-copy span { display: none; }
   
   .program-seg { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
   .program-time { align-self: flex-start; margin-left: 1.25rem; }
+}
+/* AI Copy Button */
+.btn-ai-copy {
+  background: linear-gradient(135deg, #10b981, #0ea5e9);
+  color: #fff; border: none; padding: 1rem 2rem; border-radius: 999px;
+  font-size: 1rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.75rem;
+  margin: 2rem auto; width: fit-content; min-width: 300px;
+  transition: all 0.3s ease; box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
+  font-family: 'Outfit', sans-serif;
+}
+.btn-ai-copy:hover { transform: translateY(-2px); filter: brightness(1.1); box-shadow: 0 12px 30px rgba(14, 165, 233, 0.4); }
+.btn-ai-copy svg { width: 20px; height: 20px; fill: currentColor; }
+.btn-ai-copy.success { background: #10b981; box-shadow: 0 0 30px rgba(16, 185, 129, 0.6); }
+
+@media(max-width: 640px) {
+  .btn-ai-copy { width: 100%; min-width: 0; }
 }

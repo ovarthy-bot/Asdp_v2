@@ -1367,6 +1367,48 @@ function plan(){
       }
     });
 
+    const taskPadding = new Map();
+    let paddedAny = true;
+    let guardPad = 0;
+    while(paddedAny && guardPad < 1000) {
+      paddedAny = false;
+      guardPad++;
+      techObjs.forEach(tech => {
+        const freeTime = getFreeIntervals(tech).reduce((sum, [s,e]) => sum + (e-s), 0);
+        if (freeTime < 15) return;
+        
+        for (let i = 0; i < tech.segments.length; i++) {
+          const seg = tech.segments[i];
+          if (seg.taskId === -1 || seg.taskId == null) continue;
+          const taskObj = tasksCopy.find(t => t.id === seg.taskId);
+          if (!taskObj) continue;
+          
+          const maxPad = Math.max(15, ceil15x(taskObj.techWorkMinOriginal * 0.10));
+          const currentPad = taskPadding.get(seg.taskId) || 0;
+          if (currentPad >= maxPad) continue;
+
+          const targetEnd = seg.end;
+          const free = getFreeIntervals(tech);
+          const isFree = free.some(([fs, fe]) => targetEnd >= fs && (targetEnd + 15) <= fe);
+          if (isFree) {
+            let ok = true;
+            if (isGroup && (techRoles[tech.index] || 'regular') === 'regular') {
+              const coverage = buildSupervisorCoverage(techObjs, techRoles);
+              ok = coverage.some(([cs, ce]) => targetEnd >= cs && (targetEnd + 15) <= ce);
+            }
+            if (ok) {
+              seg.end += 15;
+              tech.totalMin = (tech.totalMin || 0) + 15;
+              taskPadding.set(seg.taskId, currentPad + 15);
+              paddedAny = true;
+              break; 
+            }
+          }
+        }
+        mergeSingleSchedule(tech);
+      });
+    }
+
     mergeAndRecompute(techObjs);
     recomputeTaskTimeline();
   }
@@ -1509,6 +1551,16 @@ function plan(){
       segs: p.segs.map(s => ({ task: s.task, s: m2t(s.start), e: m2t(s.end) }))
     };
 
+    let missingAlert = '';
+    const freeCap = techFreeCapacities[idx];
+    if (freeCap !== undefined && freeCap > p.total) {
+      const missing = freeCap - p.total;
+      missingAlert = `<div class="small" style="color:var(--warning); margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+        <svg style="width:14px;height:14px;fill:currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        <strong>${minutesToHoursStr(missing)} saat</strong> eksik zaman (boşluk) mevcut
+      </div>`;
+    }
+
     techHtml += `<div class="tech-program-block">
       <div class="tech-program-header">
         <div class="tech-program-header-left">
@@ -1516,9 +1568,10 @@ function plan(){
         </div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
           <span class="tech-program-total">Toplam: <strong>${minutesToHoursStr(p.total)} sa</strong></span>
-          <button class="btn-wa-copy" onclick="copyWA(${idx})"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg> WhatsApp</button>
+          <button class="btn-wa-copy" onclick="copyWA(${idx})"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg> <span>WhatsApp</span></button>
         </div>
       </div>
+      ${missingAlert}
       ${body}
     </div>`;
   });
@@ -1618,6 +1671,38 @@ function plan(){
     if (items) html += `<div class="attention"><strong>⚠ Atanamayan İş Parçaları</strong><br><div class="small" style="margin:6px 0">Aşağıdaki süreler hiçbir teknisyene yerleştirilemedi.</div>${items}</div>`;
   }
 
+  const aiData = {
+    calisma_sistemi: isGroup ? "Grup (Supervisor Denetimli)" : "Herkes Bağımsız",
+    toplam_is_sayisi: tasks.length,
+    toplam_sure: totalInputHours.toFixed(2) + " saat",
+    teknisyen_atamalari: perTech.map(p => ({
+      teknisyen: p.name,
+      rol: p.role,
+      toplam_sure: minutesToHoursStr(p.total) + " sa",
+      atanan_isler: p.segs.map(s => ({
+        is_no: s.task,
+        baslangic: m2t(s.start),
+        bitis: m2t(s.end)
+      }))
+    })),
+    b1_atamalari: headObj ? headObj.segments.filter(s => s.taskId !== -1).map(s => ({
+      is_no: s.taskName,
+      baslangic: m2t(workToReal(s.start)),
+      bitis: m2t(workToReal(s.end))
+    })) : [],
+    atanmayan_isler: finalUnallocated.map(u => ({
+      is_no: u.task,
+      sure: (u.minutes / 60).toFixed(2) + " sa",
+      sebep: u.reason
+    }))
+  };
+  window._aiCopyData = JSON.stringify(aiData, null, 2);
+
+  html += `<button class="btn-ai-copy" id="btnAiCopy" onclick="copyAIVerisi()">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2L9.2 8.6 2 9.2l5.4 4.7-1.7 6.9 6.3-3.8 6.3 3.8-1.7-6.9L22 9.2l-7.2-.6L12 2z"/></svg> 
+    <span>🤖 AI İçin Tüm Planı Kopyala</span>
+  </button>`;
+
   html += `<div class="footer-warning">⚠️ Bu planlama bir öneridir. Gerçek durumlarda işyeri prosedürlerine ve operasyonel ihtiyaçlara göre değişiklik yapılabilir.</div>`;
   resultsDiv.innerHTML = html;
   window.scrollTo({ top: resultsDiv.offsetTop - 20, behavior: 'smooth' });
@@ -1649,5 +1734,23 @@ window.copyWA = function(idx) {
   }).catch(err => {
     console.error('Kopyalama hatası:', err);
     alert('Kopyalama başarısız oldu. Lütfen tekrar deneyin.');
+  });
+};
+
+window.copyAIVerisi = function() {
+  if (!window._aiCopyData) return;
+  const btn = document.getElementById('btnAiCopy');
+  navigator.clipboard.writeText(window._aiCopyData).then(() => {
+    if (btn) {
+      btn.classList.add('success');
+      btn.innerHTML = '✅ Yapay Zeka Verisi Kopyalandı!';
+      setTimeout(() => {
+        btn.classList.remove('success');
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2L9.2 8.6 2 9.2l5.4 4.7-1.7 6.9 6.3-3.8 6.3 3.8-1.7-6.9L22 9.2l-7.2-.6L12 2z"/></svg> <span>🤖 AI İçin Tüm Planı Kopyala</span>';
+      }, 2000);
+    }
+  }).catch(err => {
+    console.error('AI Verisi kopyalanamadı:', err);
+    alert('Kopyalama başarısız oldu.');
   });
 };
