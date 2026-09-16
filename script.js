@@ -154,7 +154,11 @@ function renderTasks(){
       <div class="list-item-row">
         <input type="text" data-i="${i}" data-field="name" value="${escHtml(t.name)}" placeholder="İş Tanımı">
         <input type="number" step="0.25" min="0" data-i="${i}" data-field="hours" value="${t.hours}" placeholder="Saat">
-        <label class="open-toggle" title="OPEN iş: önce zorunlu işler yerleşir; bu iş kalan boş zamanları doldurmak için kullanılır."><input type="checkbox" data-i="${i}" data-field="openTask" ${t.open ? 'checked' : ''}> OPEN</label>
+        <label class="open-toggle" title="OPEN iş: önce zorunlu işler yerleşir; bu iş kalan boş zamanları doldurmak için kullanılır.">
+          <input type="checkbox" data-i="${i}" data-field="openTask" ${t.open ? 'checked' : ''}>
+          <span class="emoji-open">📖</span>
+          <span class="emoji-closed">📕</span>
+        </label>
         <button class="btn-del" data-del="${i}">×</button>
       </div>
     `;
@@ -1555,9 +1559,28 @@ function plan(){
     const freeCap = techFreeCapacities[idx];
     if (freeCap !== undefined && freeCap > p.total) {
       const missing = freeCap - p.total;
-      missingAlert = `<div class="small" style="color:var(--warning); margin-bottom:12px; display:flex; align-items:center; gap:6px;">
-        <svg style="width:14px;height:14px;fill:currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-        <strong>${minutesToHoursStr(missing)} saat</strong> eksik zaman (boşluk) mevcut
+      let gapsStr = '';
+      const techObj = techObjs[idx];
+      if (techObj) {
+        const freeIntervals = getFreeIntervals(techObj);
+        const gaps = [];
+        for (const [ws, we] of freeIntervals) {
+          if (we - ws >= 15) {
+             const startReal = workToReal(ws);
+             const endReal = workToReal(we);
+             gaps.push(`${m2t(startReal)} - ${m2t(endReal)}`);
+          }
+        }
+        if (gaps.length > 0) {
+           gapsStr = `<div style="margin-top:6px; font-family:monospace; font-size: 0.9em; opacity: 0.9;"><strong>Boşluklar:</strong> ${gaps.join(', ')}</div>`;
+        }
+      }
+      missingAlert = `<div class="small" style="color:var(--warning); margin-bottom:12px; display:flex; flex-direction:column; gap:4px; background: rgba(245, 158, 11, 0.1); padding: 0.75rem; border-radius: 0.5rem; border: 1px solid rgba(245, 158, 11, 0.2);">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <svg style="width:16px;height:16px;fill:currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+          <span style="font-size:0.95rem"><strong>${minutesToHoursStr(missing)} saat</strong> eksik zaman (boşluk) mevcut</span>
+        </div>
+        ${gapsStr}
       </div>`;
     }
 
