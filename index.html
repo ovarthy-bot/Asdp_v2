@@ -53,11 +53,15 @@
   <details class="collapsible" id="shiftDetails">
     <summary>🕒 Vardiya &amp; Yemek Molası <span class="small" id="shiftSummary" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
     <div class="body">
-      <div class="input-group"><label style="width:130px">Vardiya Başlangıç</label><input type="time" id="shiftStart"></div>
-      <div class="input-group"><label style="width:130px">Vardiya Bitiş</label><input type="time" id="shiftEnd"></div>
-      <div class="input-group"><label style="width:130px">Yemek Molası</label>
+      <div class="input-group"><label>Vardiya Başlangıç</label><input type="time" id="shiftStart"></div>
+      <div class="input-group"><label>Vardiya Bitiş</label><input type="time" id="shiftEnd"></div>
+      <div class="input-group"><label>Yemek Molası</label>
         <input type="time" id="breakStart"><input type="time" id="breakEnd">
         <button class="btn" id="clearBreak" style="background:#111;color:var(--muted);border:1px solid var(--border)">Temizle</button>
+      </div>
+      <div class="input-group"><label>Çay Molası</label>
+        <input type="time" id="teaBreakStart"><input type="time" id="teaBreakEnd">
+        <button class="btn" id="clearTeaBreak" style="background:#111;color:var(--muted);border:1px solid var(--border)">Temizle</button>
       </div>
     </div>
   </details>
@@ -66,7 +70,7 @@
   <details class="collapsible" id="b1Details">
     <summary>👑 B1 Teknisyen Ayarları <span class="small" id="b1Summary" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
     <div class="body">
-      <div class="input-group"><label style="width:130px">B1 Teknisyen</label><input type="text" id="headTech" placeholder="B1 Teknisyen"></div>
+      <div class="input-group"><label>B1 Teknisyen</label><input type="text" id="headTech" placeholder="B1 Teknisyen"></div>
       <hr style="border-color:var(--border);margin:12px 0;">
       <label class="small" style="color:var(--muted)">B1 Teknisyen Dolu Saatleri (Opsiyonel)</label>
       <div id="headBlocks" style="margin-top:8px;"></div>

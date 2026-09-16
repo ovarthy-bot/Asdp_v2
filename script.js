@@ -20,6 +20,8 @@ let shiftStart = localStorage.getItem('asdp_shiftStart') || '11:45';
 let shiftEnd = localStorage.getItem('asdp_shiftEnd') || '19:45';
 let breakStart = localStorage.getItem('asdp_breakStart') || '';
 let breakEnd = localStorage.getItem('asdp_breakEnd') || '';
+let teaBreakStart = localStorage.getItem('asdp_teaBreakStart') || '';
+let teaBreakEnd = localStorage.getItem('asdp_teaBreakEnd') || '';
 let headBlocks = load('asdp_headBlocks', [{start: '', end: ''}]);
 let techBlocks = load('asdp_techBlocks', []);
 let programNote = localStorage.getItem('asdp_programNote') || '';
@@ -67,7 +69,11 @@ function updateShiftSummary(){
   const se = $('shiftEnd').value || '—';
   const bs = $('breakStart').value;
   const be = $('breakEnd').value;
-  const breakStr = (bs && be) ? ` | mola ${bs}-${be}` : '';
+  const ts = $('teaBreakStart').value;
+  const te = $('teaBreakEnd').value;
+  let breakStr = '';
+  if (bs && be) breakStr += ` | Yemek ${bs}-${be}`;
+  if (ts && te) breakStr += ` | Çay ${ts}-${te}`;
   $('shiftSummary').textContent = `${ss} → ${se}${breakStr}`;
 }
 function updateB1Summary(){
@@ -199,12 +205,65 @@ function updateTasksStat(){
   const total = tasks.reduce((s,t)=> s + (parseFloat(t.hours)||0), 0);
   const openCount = tasks.filter(t => !!t.open).length;
   tasksStatDiv.innerHTML = `Toplam İş: <strong>${count}</strong> – Toplam Süre (girdi): <strong>${total.toFixed(2)} saat</strong>${openCount ? ` – OPEN: <strong>${openCount}</strong>` : ''}`;
+  tasksStatDiv.innerHTML = `Toplam İş: <strong>${count}</strong> – Toplam Saat: <strong>${total.toFixed(2)}</strong>`;
 }
 
 function updateTechsStat(){
   const count = technicians.length;
   const totalTaskHours = tasks.reduce((s,t)=> s + (parseFloat(t.hours)||0), 0);
   const avgPerTech = count>0 ? (totalTaskHours / count).toFixed(2) : '0.00';
+  let netCapHours = '0.00';
+  
+  const sReal = t2m($('shiftStart').value);
+  const eReal = t2m($('shiftEnd').value);
+  if (sReal && eReal && eReal > sReal) {
+    let breaks = [];
+    const bsReal = t2m($('breakStart').value);
+    const beReal = t2m($('breakEnd').value);
+    if (bsReal !== null && beReal !== null && beReal > bsReal) breaks.push({ s: bsReal, e: beReal, len: beReal - bsReal });
+    const tsReal = t2m($('teaBreakStart').value);
+    const teReal = t2m($('teaBreakEnd').value);
+    if (tsReal !== null && teReal !== null && teReal > tsReal) breaks.push({ s: tsReal, e: teReal, len: teReal - tsReal });
+    breaks.sort((a,b)=>a.s - b.s);
+
+    const totalBreakLen = breaks.reduce((sum, b) => sum + b.len, 0);
+    const workEnd = (eReal - sReal) - totalBreakLen;
+    
+    if (workEnd > 0) {
+      function r2w(rm) {
+        if(rm < sReal || rm > sReal + workEnd + totalBreakLen) return null;
+        let work = rm - sReal;
+        for (const b of breaks) {
+          if (rm >= b.s && rm < b.e) return null;
+          if (rm >= b.e) work -= b.len;
+        }
+        return work;
+      }
+      
+      let totalCapMin = 0;
+      (techBlocks || []).slice(0, count).forEach(blocks => {
+        let busy = 0;
+        const valid = [];
+        (blocks || []).forEach(b => {
+          const sr = t2m(b.start), er = t2m(b.end);
+          if (sr !== null && er !== null && er > sr) {
+            const sw = r2w(sr), ew = r2w(er);
+            if (sw !== null && ew !== null && ew > sw) valid.push({s: Math.max(0, sw), e: Math.min(workEnd, ew)});
+          }
+        });
+        valid.sort((a,b)=>a.s-b.s);
+        const merged = [];
+        for (const v of valid) {
+          if (!merged.length || v.s > merged[merged.length-1].e) merged.push({...v});
+          else merged[merged.length-1].e = Math.max(merged[merged.length-1].e, v.e);
+        }
+        merged.forEach(m => busy += (m.e - m.s));
+        totalCapMin += Math.max(0, workEnd - busy);
+      });
+      netCapHours = (totalCapMin / 60).toFixed(2);
+    }
+  }
+
   let extra = '';
   if (planMode === 'group') {
     const sup = techRoles.filter(r => r === 'supervisor').length;
@@ -213,6 +272,7 @@ function updateTechsStat(){
     extra = `<br><span class="small">Supervisor: <strong>${sup}</strong> – Kalifiyeli: <strong>${qua}</strong> – Teknisyen: <strong>${reg}</strong></span>`;
   }
   techsStatDiv.innerHTML = `Toplam Teknisyen: <strong>${count}</strong> – Ortalama Yük: <strong>${avgPerTech} saat</strong>${extra}`;
+  techsStatDiv.innerHTML = `Toplam Teknisyen: <strong>${count}</strong> – Net kapasite: <strong>${netCapHours} saat</strong>${extra}`;
 }
 
 // ---- Initial render ----
@@ -222,6 +282,8 @@ $('shiftStart').value = shiftStart;
 $('shiftEnd').value = shiftEnd;
 $('breakStart').value = breakStart;
 $('breakEnd').value = breakEnd;
+if ($('teaBreakStart')) $('teaBreakStart').value = teaBreakStart;
+if ($('teaBreakEnd')) $('teaBreakEnd').value = teaBreakEnd;
 applyModeUI();
 updateShiftSummary();
 updateB1Summary();
@@ -233,6 +295,7 @@ $('addTech').addEventListener('click', ()=>{ technicians.push(`Teknisyen ${techn
 $('resetTasks').addEventListener('click', ()=>{ if(confirm('Tüm işleri sıfırlamak?')){ tasks=[]; renderTasks(); }});
 $('resetTechs').addEventListener('click', ()=>{ if(confirm('Tüm teknisyenleri sıfırlamak?')){ technicians=[]; techBlocks=[]; techRoles=[]; renderTechs(); renderTechBlocks(); }});
 $('clearBreak').addEventListener('click', ()=>{ $('breakStart').value=''; $('breakEnd').value=''; breakStart=''; breakEnd=''; localStorage.removeItem('asdp_breakStart'); localStorage.removeItem('asdp_breakEnd'); updateShiftSummary(); });
+if ($('clearTeaBreak')) $('clearTeaBreak').addEventListener('click', ()=>{ $('teaBreakStart').value=''; $('teaBreakEnd').value=''; teaBreakStart=''; teaBreakEnd=''; localStorage.removeItem('asdp_teaBreakStart'); localStorage.removeItem('asdp_teaBreakEnd'); updateShiftSummary(); });
 $('addHeadBlock').addEventListener('click', ()=>{ headBlocks.push({start:'', end:''}); renderHeadBlocks(); });
 $('addTechBlock').addEventListener('click', ()=>{
   normalizeTechBlocks();
@@ -358,23 +421,31 @@ $('shiftStart').addEventListener('input', e=>{ shiftStart = e.target.value; loca
 $('shiftEnd').addEventListener('input', e=>{ shiftEnd = e.target.value; localStorage.setItem('asdp_shiftEnd', shiftEnd); updateShiftSummary(); });
 $('breakStart').addEventListener('input', e=>{ breakStart = e.target.value; localStorage.setItem('asdp_breakStart', breakStart); updateShiftSummary(); });
 $('breakEnd').addEventListener('input', e=>{ breakEnd = e.target.value; localStorage.setItem('asdp_breakEnd', breakEnd); updateShiftSummary(); });
+if ($('teaBreakStart')) $('teaBreakStart').addEventListener('input', e=>{ teaBreakStart = e.target.value; localStorage.setItem('asdp_teaBreakStart', teaBreakStart); updateShiftSummary(); });
+if ($('teaBreakEnd')) $('teaBreakEnd').addEventListener('input', e=>{ teaBreakEnd = e.target.value; localStorage.setItem('asdp_teaBreakEnd', teaBreakEnd); updateShiftSummary(); });
 $('headTech').addEventListener('input', e=>{ headTech = e.target.value; localStorage.setItem('asdp_head', headTech); updateB1Summary(); });
 
 // ============================================================
 // Time helpers
 // ============================================================
-let _shiftS_real, _breakExists, _breakS_real, _breakE_real, _breakLen, _workEnd_offset;
+let _shiftS_real, _breaks = [], _totalBreakLen = 0, _workEnd_offset;
 
 function workToReal(workOffset){
-  const real = _shiftS_real + workOffset;
-  if(_breakExists && real >= _breakS_real) return real + _breakLen;
+  let real = _shiftS_real + workOffset;
+  for (const b of _breaks) {
+    if (real >= b.s) real += b.len;
+  }
   return real;
 }
 function realToWork(realMin){
-  if(realMin < _shiftS_real || realMin > _shiftS_real + _workEnd_offset + _breakLen) return null;
-  if(_breakExists && realMin >= _breakS_real && realMin < _breakE_real) return null;
-  if(_breakExists && realMin >= _breakE_real) return realMin - _shiftS_real - _breakLen;
-  return realMin - _shiftS_real;
+  const shiftEReal = _shiftS_real + _workEnd_offset + _totalBreakLen;
+  if(realMin < _shiftS_real || realMin > shiftEReal) return null;
+  let work = realMin - _shiftS_real;
+  for (const b of _breaks) {
+    if(realMin >= b.s && realMin < b.e) return null;
+    if(realMin >= b.e) work -= b.len;
+  }
+  return work;
 }
 
 // ============================================================
@@ -652,6 +723,8 @@ $('planBtn').addEventListener('click', ()=>{
   localStorage.setItem('asdp_shiftEnd',$('shiftEnd').value||'');
   localStorage.setItem('asdp_breakStart',$('breakStart').value||'');
   localStorage.setItem('asdp_breakEnd',$('breakEnd').value||'');
+  if($('teaBreakStart')) localStorage.setItem('asdp_teaBreakStart',$('teaBreakStart').value||'');
+  if($('teaBreakEnd')) localStorage.setItem('asdp_teaBreakEnd',$('teaBreakEnd').value||'');
   localStorage.setItem('asdp_head',$('headTech').value||'');
   save('asdp_headBlocks', headBlocks);
   save('asdp_techBlocks', techBlocks);
@@ -686,11 +759,17 @@ function plan(){
   const shiftE_real = t2m($('shiftEnd').value);
   if(shiftE_real <= _shiftS_real){ resultsDiv.innerHTML = `<div class="warning">Vardiya bitiş saati başlangıçtan sonra olmalı.</div>`; return; }
 
-  _breakExists = !!($('breakStart').value && $('breakEnd').value && t2m($('breakEnd').value) > t2m($('breakStart').value));
-  _breakS_real = _breakExists ? t2m($('breakStart').value) : null;
-  _breakE_real = _breakExists ? t2m($('breakEnd').value) : null;
-  _breakLen = _breakExists ? (_breakE_real - _breakS_real) : 0;
-  _workEnd_offset = (shiftE_real - _shiftS_real) - _breakLen;
+  _breaks = [];
+  const bsReal = t2m($('breakStart').value);
+  const beReal = t2m($('breakEnd').value);
+  if (bsReal !== null && beReal !== null && beReal > bsReal) _breaks.push({ s: bsReal, e: beReal, len: beReal - bsReal });
+  const tsReal = t2m($('teaBreakStart')?.value);
+  const teReal = t2m($('teaBreakEnd')?.value);
+  if (tsReal !== null && teReal !== null && teReal > tsReal) _breaks.push({ s: tsReal, e: teReal, len: teReal - tsReal });
+  _breaks.sort((a,b)=>a.s - b.s);
+
+  _totalBreakLen = _breaks.reduce((sum, b) => sum + b.len, 0);
+  _workEnd_offset = (shiftE_real - _shiftS_real) - _totalBreakLen;
   if(_workEnd_offset <= 0) { resultsDiv.innerHTML = `<div class="warning">Vardiya çok kısa / mola çok uzun - plan yapılamıyor.</div>`; return; }
 
   const HEAD_MIN = 15;
@@ -904,7 +983,8 @@ function plan(){
     iter++;
     totals.sort((a,b)=>b.total - a.total);
     const maxTech = totals[0], minTech = totals[totals.length-1];
-    if((maxTech.total - minTech.total) <= 30) break;
+    const diff = maxTech.total - minTech.total;
+    if(diff < 30) break;
 
     const donor = techObjs[maxTech.idx];
     const receiver = techObjs[minTech.idx];
@@ -915,8 +995,10 @@ function plan(){
       const seg = donor.segments[si];
       if (seg.taskId === -1) continue;
       const segDuration = seg.end - seg.start;
-      if(segDuration >= 45){
-        const transferAmount = Math.max(15, Math.min(60, floor15(segDuration / 2)));
+      if(segDuration >= 15){
+        let transferAmount = floor15(diff / 2);
+        if (transferAmount > segDuration) transferAmount = segDuration;
+        
         let attempt;
         if (isGroup && receiver.role === 'regular') {
           const cov = buildSupervisorCoverage(techObjs, techRoles);
@@ -940,6 +1022,46 @@ function plan(){
     if(!transferred) break;
     mergeAndRecompute(techObjs);
     totals = getTotals();
+  }
+  mergeAndRecompute(techObjs);
+
+  // PADDING PHASE: Equate technicians using up to 10% time extension (min 15m)
+  totals = getTotals();
+  totals.sort((a,b)=>b.total - a.total);
+  const targetTotal = totals[0].total;
+
+  for (let i = 1; i < totals.length; i++) {
+    const tech = techObjs[totals[i].idx];
+    let deficit = targetTotal - tech.totalMin;
+    while (deficit >= 15) {
+      let padded = false;
+      for (let si = 0; si < tech.segments.length && deficit >= 15; si++) {
+        const seg = tech.segments[si];
+        if (seg.taskId === -1) continue;
+        const task = rawTasks.find(t => t.id === seg.taskId);
+        if (!task) continue;
+        const allowedPad = Math.max(15, ceil15x(task.rawMin * 0.10));
+        if (allowedPad >= 15) {
+          let padAttempt;
+          if (isGroup && tech.role === 'regular') {
+             const cov = buildSupervisorCoverage(techObjs, techRoles);
+             if (cov.length > 0) padAttempt = placeOnTech(tech, 15, seg.taskId, seg.taskName, { coverage: cov });
+             if (!padAttempt) padAttempt = placeOnTech(tech, 15, seg.taskId, seg.taskName);
+          } else {
+             padAttempt = placeOnTech(tech, 15, seg.taskId, seg.taskName);
+          }
+          if (padAttempt) {
+             deficit -= 15;
+             const arr = taskSegments.get(seg.taskId) || [];
+             arr.push({ techIndex: tech.index, start: padAttempt.start, end: padAttempt.end });
+             taskSegments.set(seg.taskId, arr);
+             padded = true;
+             break; // restart outer while loop to evaluate deficit
+          }
+        }
+      }
+      if (!padded) break; // could not pad further
+    }
   }
   mergeAndRecompute(techObjs);
 
@@ -1162,13 +1284,14 @@ function plan(){
 
     function findOpenSlotForTarget(target){
       const free = getFreeIntervals(target.obj);
-      for (const [fs, fe] of free) {
-        let cursor = fs;
-        while (cursor + 15 <= fe) {
+      for (let i = free.length - 1; i >= 0; i--) {
+        const [fs, fe] = free[i];
+        let cursor = floor15(fe) - 15;
+        while (cursor >= fs) {
           if (isGroup && target.role === 'regular') {
             const coverage = buildSupervisorCoverage(techObjs, techRoles);
             const ok = coverage.some(([cs, ce]) => cursor >= cs && (cursor + 15) <= ce);
-            if (!ok) { cursor += 15; continue; }
+            if (!ok) { cursor -= 15; continue; }
           }
           return { start: cursor, end: cursor + 15 };
         }
@@ -1276,10 +1399,10 @@ function plan(){
       const real = { startReal: workToReal(s.start), endReal: workToReal(s.end) };
       perTech[idx].segs.push({ task: tasks[s.taskId].name, start: real.startReal, end: real.endReal, _ws: s.start, _we: s.end });
       let segmentDuration = real.endReal - real.startReal;
-      if (_breakExists) {
-        if (real.startReal < _breakE_real && real.endReal > _breakS_real) {
-          const overlapStart = Math.max(real.startReal, _breakS_real);
-          const overlapEnd = Math.min(real.endReal, _breakE_real);
+      for (const b of _breaks) {
+        if (real.startReal < b.e && real.endReal > b.s) {
+          const overlapStart = Math.max(real.startReal, b.s);
+          const overlapEnd = Math.min(real.endReal, b.e);
           segmentDuration -= Math.max(0, overlapEnd - overlapStart);
         }
       }
@@ -1333,28 +1456,6 @@ function plan(){
         <span style="color:var(--danger)">➜ Tüm işler orantılı olarak <strong>~%${reductionPct}</strong> küçültüldü.</span>
       </span>${detailHtml}
     </div></details>`;
-  } else {
-    const capHours = (totalCapacityMin / 60).toFixed(2);
-    const needHours = (totalTechWorkNeeded / 60).toFixed(2);
-    const totalPlanned = rawTasks.reduce((s, t) => s + t.techWorkMin, 0);
-    const plannedHours = (totalPlanned / 60).toFixed(2);
-    const usagePct = totalCapacityMin > 0 ? ((totalPlanned / totalCapacityMin) * 100).toFixed(1) : '0';
-    const hasRounding = roundingAdjustments.length > 0;
-    let roundingNote = '';
-    if (hasRounding) {
-      roundingNote = '<br><span style="color:#f59e0b">⚙️ 15dk yuvarlama:</span><br>';
-      roundingNote += roundingAdjustments.map(adj => {
-        const sign = adj.diff > 0 ? '+' : '';
-        return `<span style="color:var(--muted);font-size:0.85em">  • ${escHtml(adj.name)}: ${(adj.before/60).toFixed(2)} → ${(adj.after/60).toFixed(2)} saat (${sign}${adj.diff} dk)</span>`;
-      }).join('<br>');
-    }
-    html += `<details class="collapsible" open><summary>✅ Kapasite Yeterli</summary><div class="body note">
-      <strong>Kapasite yeterli</strong><br>
-      <span class="small" style="color:var(--muted)">
-        Net kapasite: ${capHours} saat – İhtiyaç: ${needHours} saat – Planlanan: ${plannedHours} saat – Kullanım: %${usagePct}<br>
-        OPEN işler kapasite küçültmesine dahil edilmez; zorunlu işler bittikten sonra kalan teknisyen ve B1 boşluklarını doldurmak için kullanılır.
-      </span>${roundingNote}
-    </div></details>`;
   }
 
   // ==========================================================
@@ -1397,12 +1498,22 @@ function plan(){
       body = '<div class="program-empty">⚠ Atanmış iş yok</div>';
     }
 
+    window._waCopyData = window._waCopyData || {};
+    window._waCopyData[idx] = { 
+      name: p.name, 
+      total: minutesToHoursStr(p.total), 
+      segs: p.segs.map(s => ({ task: s.task, s: m2t(s.start), e: m2t(s.end) }))
+    };
+
     techHtml += `<div class="tech-program-block">
       <div class="tech-program-header">
         <div class="tech-program-header-left">
           <span class="tech-program-name">${escHtml(p.name)}</span>${roleTag}
         </div>
-        <span class="tech-program-total">Toplam: <strong>${minutesToHoursStr(p.total)} sa</strong></span>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <span class="tech-program-total">Toplam: <strong>${minutesToHoursStr(p.total)} sa</strong></span>
+          <button class="btn-wa-copy" onclick="copyWA(${idx})">📋 WhatsApp</button>
+        </div>
       </div>
       ${body}
     </div>`;
@@ -1507,3 +1618,32 @@ function plan(){
   resultsDiv.innerHTML = html;
   window.scrollTo({ top: resultsDiv.offsetTop - 20, behavior: 'smooth' });
 }
+
+window.copyWA = function(idx) {
+  const data = window._waCopyData[idx];
+  if (!data) return;
+  const shiftS = $('shiftStart').value || '—';
+  const shiftE = $('shiftEnd').value || '—';
+  let text = `👷 *${data.name}*\n⏳ Toplam: ${data.total} saat\n🗓️ Vardiya: ${shiftS} - ${shiftE}\n`;
+  
+  const bs = $('breakStart').value, be = $('breakEnd').value;
+  if (bs && be) text += `🍲 Yemek: ${bs} - ${be}\n`;
+  const ts = $('teaBreakStart') ? $('teaBreakStart').value : '', te = $('teaBreakEnd') ? $('teaBreakEnd').value : '';
+  if (ts && te) text += `☕ Çay: ${ts} - ${te}\n`;
+  
+  text += `\n*GÖREVLER:*\n`;
+  if (data.segs.length > 0) {
+    data.segs.forEach(s => {
+      text += `🔹 ${s.s} - ${s.e} | ${s.task}\n`;
+    });
+  } else {
+    text += `⚠ Atanmış iş yok.\n`;
+  }
+  
+  navigator.clipboard.writeText(text).then(() => {
+    alert(data.name + ' planı kopyalandı!');
+  }).catch(err => {
+    console.error('Kopyalama hatası:', err);
+    alert('Kopyalama başarısız oldu. Lütfen tekrar deneyin.');
+  });
+};
