@@ -1469,7 +1469,7 @@ function plan(){
       <textarea data-field="program-note" placeholder="Planla ilgili not ekle...">${escHtml(programNote)}</textarea>
     </div>`;
 
-  perTech.forEach(p=>{
+  perTech.forEach((p, idx)=>{
     p.segs.sort((a,b)=>a.start - b.start);
     const roleTag = isGroup
       ? `<span class="role-tag program-role-tag ${p.role}">${p.role === 'supervisor' ? 'Supervisor' : p.role === 'qualified' ? 'Kalifiyeli' : 'Teknisyen'}</span>`
