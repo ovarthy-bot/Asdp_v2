@@ -178,10 +178,10 @@ function renderTechs(){
     row.innerHTML = `
       <div class="list-item-row">
         <input type="text" data-i="${i}" data-field="tech" value="${escHtml(t)}" placeholder="Teknisyen Adı">
-        <select class="role-select group-only" data-i="${i}" data-field="techRole" style="font-size: 1.1rem; padding: 0.5rem; text-align: center;">
-          <option value="supervisor"${role==='supervisor'?' selected':''}>👷🏼‍♂️ Sup</option>
-          <option value="qualified"${role==='qualified'?' selected':''}>🧑‍🔬 Kalif</option>
-          <option value="regular"${role==='regular'?' selected':''}>👨‍🔧 Tek</option>
+        <select class="role-select group-only" data-i="${i}" data-field="techRole" style="font-size: 0.95rem; padding: 0.5rem;">
+          <option value="supervisor"${role==='supervisor'?' selected':''}>👷🏼‍♂️ Supervisor</option>
+          <option value="qualified"${role==='qualified'?' selected':''}>🧑‍🔬 Kalifiyeli</option>
+          <option value="regular"${role==='regular'?' selected':''}>👨‍🔧 Teknisyen</option>
         </select>
         <button class="btn-del" data-deltech="${i}">×</button>
       </div>

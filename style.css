@@ -220,7 +220,7 @@ body.mode-group .all-only { display: none !important; }
   .list-item-row { flex-wrap: nowrap; gap: 0.5rem; }
   .list-item-row > input[type="text"] { flex: 1 1 auto; min-width: 0; padding: 0.65rem 0.75rem; font-size: 0.9rem; }
   .list-item-row > input[type="number"] { flex: 0 1 60px; min-width: 0; padding: 0.65rem 0.5rem; font-size: 0.9rem; text-align: center; }
-  .list-item-row > .role-select { flex: 0 1 80px; min-width: 0; padding: 0.65rem 0.25rem; font-size: 0.8rem; }
+  .list-item-row > .role-select { flex: 0 1 125px; min-width: 0; padding: 0.65rem 0.25rem; font-size: 0.8rem; }
   .list-item-row > .open-toggle { flex: 0 0 auto; padding: 0.65rem; font-size: 1.1rem; }
   .list-item-row > .btn-del { flex: 0 0 auto; padding: 0.65rem; }
 
