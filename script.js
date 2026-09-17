@@ -178,10 +178,10 @@ function renderTechs(){
     row.innerHTML = `
       <div class="list-item-row">
         <input type="text" data-i="${i}" data-field="tech" value="${escHtml(t)}" placeholder="Teknisyen Adı">
-        <select class="role-select group-only" data-i="${i}" data-field="techRole">
-          <option value="supervisor"${role==='supervisor'?' selected':''}>Supervisor</option>
-          <option value="qualified"${role==='qualified'?' selected':''}>Kalifiyeli</option>
-          <option value="regular"${role==='regular'?' selected':''}>Teknisyen</option>
+        <select class="role-select group-only" data-i="${i}" data-field="techRole" style="font-size: 1.1rem; padding: 0.5rem; text-align: center;">
+          <option value="supervisor"${role==='supervisor'?' selected':''}>👷🏼‍♂️ Sup</option>
+          <option value="qualified"${role==='qualified'?' selected':''}>🧑‍🔬 Kalif</option>
+          <option value="regular"${role==='regular'?' selected':''}>👨‍🔧 Tek</option>
         </select>
         <button class="btn-del" data-deltech="${i}">×</button>
       </div>
@@ -1522,7 +1522,7 @@ function plan(){
   perTech.forEach((p, idx)=>{
     p.segs.sort((a,b)=>a.start - b.start);
     const roleTag = isGroup
-      ? `<span class="role-tag ${p.role}" style="font-size:1.25rem; padding:0; background:transparent; border:none; margin-left:4px;" title="${p.role === 'supervisor' ? 'Supervisor' : p.role === 'qualified' ? 'Kalifiyeli' : 'Teknisyen'}">${p.role === 'supervisor' ? '👷🏼‍♂️' : p.role === 'qualified' ? '🧑‍🔬' : '👨‍🔧'}</span>`
+      ? `<span style="font-size:1.25rem; margin-left:6px; display:inline-flex; align-items:center;" title="${p.role === 'supervisor' ? 'Supervisor' : p.role === 'qualified' ? 'Kalifiyeli' : 'Teknisyen'}">${p.role === 'supervisor' ? '👷🏼‍♂️' : p.role === 'qualified' ? '🧑‍🔬' : '👨‍🔧'}</span>`
       : '';
 
     let body;

@@ -85,7 +85,7 @@ header h1 {
 /* --- INPUTS & BUTTONS --- */
 .input-group { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; align-items: center; flex-wrap: wrap; }
 .input-group label { min-width: 130px; font-size: 0.9rem; color: var(--text-muted); font-weight: 500; }
-input[type=""text""], input[type=""number""], input[type=""time""], select, textarea {
+input[type="text"], input[type="number"], input[type="time"], select, textarea {
   background: rgba(0, 0, 0, 0.2); border: 1px solid var(--card-border); color: var(--text-main);
   padding: 0.75rem 1rem; border-radius: 0.75rem; font-family: inherit; font-size: 0.95rem;
   flex: 1; min-width: 0; transition: all 0.2s ease;
