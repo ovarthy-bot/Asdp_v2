@@ -1522,7 +1522,7 @@ function plan(){
   perTech.forEach((p, idx)=>{
     p.segs.sort((a,b)=>a.start - b.start);
     const roleTag = isGroup
-      ? `<span class="role-tag program-role-tag ${p.role}">${p.role === 'supervisor' ? 'Supervisor' : p.role === 'qualified' ? 'Kalifiyeli' : 'Teknisyen'}</span>`
+      ? `<span class="role-tag ${p.role}" style="font-size:1.25rem; padding:0; background:transparent; border:none; margin-left:4px;" title="${p.role === 'supervisor' ? 'Supervisor' : p.role === 'qualified' ? 'Kalifiyeli' : 'Teknisyen'}">${p.role === 'supervisor' ? '👷🏼‍♂️' : p.role === 'qualified' ? '🧑‍🔬' : '👨‍🔧'}</span>`
       : '';
 
     let body;
