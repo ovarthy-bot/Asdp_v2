@@ -26,6 +26,17 @@
     </div>
   </details>
 
+  <!-- Algoritma Seçimi (collapsed) -->
+  <details class="collapsible" id="algoDetails">
+    <summary>🧠 Dağıtım Algoritması <span class="small" id="algoSummaryNote" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
+    <div class="body">
+      <div class="mode-row" id="algoRow">
+        <label data-algo="b1_priority"><input type="radio" name="algoMode" value="b1_priority"> B1 Öncelikli Yöntem <span class="small" style="margin-left:6px">(İşler süreye göre eşit paylaştırılır)</span></label>
+        <label data-algo="tech_priority"><input type="radio" name="algoMode" value="tech_priority"> Teknisyen Öncelikli Yöntem <span class="small" style="margin-left:6px">(Teknisyene bölmeden tam iş atamaya çalışır)</span></label>
+      </div>
+    </div>
+  </details>
+
   <div class="grid">
     <div class="card">
       <h2>📋 İşler</h2>
@@ -89,6 +100,21 @@
         <button class="btn btn-add" id="addTechBlock" style="padding:8px 12px;font-size:0.9rem;">+ Ekle</button>
       </div>
       <div id="techBlocks" style="margin-top:8px;"></div>
+    </div>
+  </details>
+
+  <!-- Teknisyen Manuel/Önceden İş Atamaları (collapsed) -->
+  <details class="collapsible" id="preAssignDetails">
+    <summary>📌 Teknisyen Manuel İş Atamaları (Opsiyonel) <span class="small" id="preAssignSummary" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
+    <div class="body">
+      <div class="input-group">
+        <select id="preAssignTechSelect"></select>
+        <select id="preAssignTaskSelect"></select>
+        <input type="time" id="preAssignStart">
+        <input type="time" id="preAssignEnd">
+        <button class="btn btn-add" id="addPreAssign" style="padding:8px 12px;font-size:0.9rem;">+ Ekle</button>
+      </div>
+      <div id="preAssigns" style="margin-top:8px;"></div>
     </div>
   </details>
 

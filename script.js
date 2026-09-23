@@ -26,6 +26,8 @@ let headBlocks = load('asdp_headBlocks', [{start: '', end: ''}]);
 let techBlocks = load('asdp_techBlocks', []);
 let programNote = localStorage.getItem('asdp_programNote') || '';
 let planMode = localStorage.getItem('asdp_planMode') || 'all';
+let algoMode = localStorage.getItem('asdp_algoMode') || 'b1_priority';
+let techPreAssignments = load('asdp_techPreAssigns', []);
 
 const tasksDiv = $('tasks'), techsDiv = $('techs'), headBlocksDiv = $('headBlocks'), techBlocksDiv = $('techBlocks'), resultsDiv = $('results');
 const tasksStatDiv = $('tasksStat'), techsStatDiv = $('techsStat'), dupeWarnDiv = $('dupeWarn');
@@ -38,6 +40,7 @@ function normalizeTechBlocks(){
   if (techBlocks.length > technicians.length) techBlocks = techBlocks.slice(0, technicians.length);
   techBlocks = techBlocks.map(list => Array.isArray(list) ? list : []);
   save('asdp_techBlocks', techBlocks);
+  save('asdp_techPreAssigns', techPreAssignments);
 }
 function normalizeTechRoles(){
   if (!Array.isArray(techRoles)) techRoles = [];
@@ -62,6 +65,13 @@ function applyModeUI(){
       '• <strong>Kalifiyeli</strong>: tek başına çalışabilir, denetim aramaz, denetleme yapmaz.<br>' +
       '• <strong>Teknisyen</strong>: yalnızca en az bir Supervisor’ün çalıştığı saatlerde iş alabilir.';
   }
+}
+
+function applyAlgoUI(){
+  document.querySelectorAll('input[name="algoMode"]').forEach(r => r.checked = (r.value === algoMode));
+  document.querySelectorAll('#algoRow label').forEach(l => l.classList.toggle('active', l.dataset.algo === algoMode));
+  const algoNote = $('algoSummaryNote');
+  if (algoNote) algoNote.textContent = (algoMode === 'b1_priority') ? 'Mevcut: B1 Öncelikli' : 'Mevcut: Teknisyen Öncelikli';
 }
 
 function updateShiftSummary(){
@@ -119,6 +129,69 @@ function renderTechBlocks(){
   updateBusySummary();
 }
 
+
+function normalizeTechPreAssignments(){
+  if (!Array.isArray(techPreAssignments)) techPreAssignments = [];
+  while (techPreAssignments.length < technicians.length) techPreAssignments.push([]);
+  if (techPreAssignments.length > technicians.length) techPreAssignments = techPreAssignments.slice(0, technicians.length);
+  techPreAssignments = techPreAssignments.map(list => Array.isArray(list) ? list : []);
+  save('asdp_techPreAssigns', techPreAssignments);
+}
+
+function updatePreAssignSummary(){
+  let count = 0;
+  (techPreAssignments || []).forEach(arr => count += (arr || []).length);
+  const el = $('preAssignSummary');
+  if (el) el.textContent = count > 0 ? `${count} atama tanımlı` : 'tanımlı yok';
+}
+
+function renderPreAssignTaskSelect(){
+  const sel = $('preAssignTaskSelect');
+  if(!sel) return;
+  const current = sel.value;
+  sel.innerHTML = tasks.map((t, i) => `<option value="${i}">${escHtml(t.name || ('İş ' + (i+1)))}</option>`).join('');
+  if(current !== '' && +current < tasks.length) sel.value = current;
+}
+
+function renderPreAssigns(){
+  normalizeTechPreAssignments();
+  
+  const techSel = $('preAssignTechSelect');
+  if (techSel) {
+    const currentTech = techSel.value;
+    techSel.innerHTML = technicians.map((name, i) => `<option value="${i}">${escHtml(name || ('Teknisyen ' + (i+1)))}</option>`).join('');
+    if(currentTech !== '' && +currentTech < technicians.length) techSel.value = currentTech;
+  }
+  
+  renderPreAssignTaskSelect();
+  
+  const preAssignsDiv = $('preAssigns');
+  if (!preAssignsDiv) return;
+  preAssignsDiv.innerHTML = '';
+  
+  technicians.forEach((name, techIndex) => {
+    const assigns = techPreAssignments[techIndex] || [];
+    if(assigns.length === 0) return;
+    const wrap = document.createElement('div');
+    wrap.style.marginBottom = '8px';
+    wrap.innerHTML = `<div style="color:var(--muted);margin:6px 0"><strong>${escHtml(name)}</strong></div>`;
+    assigns.forEach((a, assignIndex) => {
+      const taskName = tasks[a.taskId] ? tasks[a.taskId].name : 'Bilinmeyen İş';
+      const row = document.createElement('div');
+      row.className = 'input-group';
+      row.innerHTML = `
+        <span style="font-size:0.9rem; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escHtml(taskName)}">${escHtml(taskName)}</span>
+        <input type="time" data-tech-p="${techIndex}" data-assign-i="${assignIndex}" data-field="preassign-start" value="${a.start || ''}">
+        <input type="time" data-tech-p="${techIndex}" data-assign-i="${assignIndex}" data-field="preassign-end" value="${a.end || ''}">
+        <button class="btn-del" data-delpreassign="${techIndex}:${assignIndex}" style="padding:8px 10px">×</button>
+      `;
+      wrap.appendChild(row);
+    });
+    preAssignsDiv.appendChild(wrap);
+  });
+  updatePreAssignSummary();
+}
+
 function checkDuplicateTaskNames(){
   const counts = new Map();
   tasks.forEach((t, i) => {
@@ -167,6 +240,8 @@ function renderTasks(){
   save('asdp_tasks', tasks);
   updateTasksStat();
   renderDupeWarning();
+  renderPreAssignTaskSelect();
+  renderPreAssigns();
 }
 
 function renderTechs(){
@@ -192,6 +267,7 @@ function renderTechs(){
   normalizeTechBlocks();
   renderTechBlockSelect();
   updateTechsStat();
+  renderPreAssigns();
 }
 
 function renderHeadBlocks(){
@@ -284,7 +360,7 @@ function updateTechsStat(){
 }
 
 // ---- Initial render ----
-renderTasks(); renderTechs(); renderHeadBlocks(); renderTechBlocks();
+renderTasks(); renderTechs(); renderHeadBlocks(); renderTechBlocks(); renderPreAssigns();
 $('headTech').value = headTech;
 $('shiftStart').value = shiftStart;
 $('shiftEnd').value = shiftEnd;
@@ -293,6 +369,7 @@ $('breakEnd').value = breakEnd;
 if ($('teaBreakStart')) $('teaBreakStart').value = teaBreakStart;
 if ($('teaBreakEnd')) $('teaBreakEnd').value = teaBreakEnd;
 applyModeUI();
+applyAlgoUI();
 updateShiftSummary();
 updateB1Summary();
 updateBusySummary();
@@ -305,6 +382,21 @@ $('resetTechs').addEventListener('click', ()=>{ if(confirm('Tüm teknisyenleri s
 $('clearBreak').addEventListener('click', ()=>{ $('breakStart').value=''; $('breakEnd').value=''; breakStart=''; breakEnd=''; localStorage.removeItem('asdp_breakStart'); localStorage.removeItem('asdp_breakEnd'); updateShiftSummary(); });
 if ($('clearTeaBreak')) $('clearTeaBreak').addEventListener('click', ()=>{ $('teaBreakStart').value=''; $('teaBreakEnd').value=''; teaBreakStart=''; teaBreakEnd=''; localStorage.removeItem('asdp_teaBreakStart'); localStorage.removeItem('asdp_teaBreakEnd'); updateShiftSummary(); });
 $('addHeadBlock').addEventListener('click', ()=>{ headBlocks.push({start:'', end:''}); renderHeadBlocks(); });
+
+$('addPreAssign').addEventListener('click', ()=>{
+  normalizeTechPreAssignments();
+  const techIndex = +$('preAssignTechSelect').value;
+  const taskId = +$('preAssignTaskSelect').value;
+  const start = $('preAssignStart').value;
+  const end = $('preAssignEnd').value;
+  if (!Number.isFinite(techIndex) || !Number.isFinite(taskId) || !start || !end || t2m(end) <= t2m(start)) { alert('Geçerli teknisyen, iş, başlangıç ve bitiş saati girin.'); return; }
+  techPreAssignments[techIndex].push({taskId, start, end});
+  $('preAssignStart').value = '';
+  $('preAssignEnd').value = '';
+  save('asdp_techPreAssigns', techPreAssignments);
+  renderPreAssigns();
+});
+
 $('addTechBlock').addEventListener('click', ()=>{
   normalizeTechBlocks();
   const techIndex = +$('techBlockSelect').value;
@@ -315,6 +407,7 @@ $('addTechBlock').addEventListener('click', ()=>{
   $('techBlockStart').value = '';
   $('techBlockEnd').value = '';
   save('asdp_techBlocks', techBlocks);
+  save('asdp_techPreAssigns', techPreAssignments);
   renderTechBlocks();
 });
 
@@ -323,6 +416,12 @@ document.querySelectorAll('input[name="planMode"]').forEach(r => r.addEventListe
   localStorage.setItem('asdp_planMode', planMode);
   applyModeUI();
   updateTechsStat();
+}));
+
+document.querySelectorAll('input[name="algoMode"]').forEach(r => r.addEventListener('change', e => {
+  algoMode = e.target.value;
+  localStorage.setItem('asdp_algoMode', algoMode);
+  applyAlgoUI();
 }));
 
 mainContainer.addEventListener('input', e => {
@@ -335,6 +434,18 @@ mainContainer.addEventListener('input', e => {
     return;
   }
 
+
+  if (f === 'preassign-start' || f === 'preassign-end') {
+    const techIndex = +e.target.dataset.techP;
+    const assignIndex = +e.target.dataset.assignI;
+    normalizeTechPreAssignments();
+    if (techPreAssignments[techIndex] && techPreAssignments[techIndex][assignIndex]) {
+      if (f === 'preassign-start') techPreAssignments[techIndex][assignIndex].start = e.target.value;
+      if (f === 'preassign-end') techPreAssignments[techIndex][assignIndex].end = e.target.value;
+      save('asdp_techPreAssigns', techPreAssignments);
+    }
+    return;
+  }
   if (f === 'techblock-start' || f === 'techblock-end') {
     const techIndex = +e.target.dataset.techI;
     const blockIndex = +e.target.dataset.blockI;
@@ -343,6 +454,7 @@ mainContainer.addEventListener('input', e => {
       if (f === 'techblock-start') techBlocks[techIndex][blockIndex].start = e.target.value;
       if (f === 'techblock-end') techBlocks[techIndex][blockIndex].end = e.target.value;
       save('asdp_techBlocks', techBlocks);
+  save('asdp_techPreAssigns', techPreAssignments);
     }
     return;
   }
@@ -401,17 +513,29 @@ mainContainer.addEventListener('click', e => {
     techBlocks.splice(idx,1);
     if (Array.isArray(techRoles)) techRoles.splice(idx,1);
     save('asdp_techBlocks', techBlocks);
+  save('asdp_techPreAssigns', techPreAssignments);
     save('asdp_techRoles', techRoles);
     renderTechs(); renderTechBlocks();
     return;
   }
 
+
+  const delPreAssign = e.target.closest('[data-delpreassign]');
+  if(delPreAssign){
+    const [techIndex, assignIndex] = delPreAssign.dataset.delpreassign.split(':').map(Number);
+    normalizeTechPreAssignments();
+    if (techPreAssignments[techIndex]) techPreAssignments[techIndex].splice(assignIndex, 1);
+    save('asdp_techPreAssigns', techPreAssignments);
+    renderPreAssigns();
+    return;
+  }
   const delTechBlock = e.target.closest('[data-deltechblock]');
   if(delTechBlock){
     const [techIndex, blockIndex] = delTechBlock.dataset.deltechblock.split(':').map(Number);
     normalizeTechBlocks();
     if (techBlocks[techIndex]) techBlocks[techIndex].splice(blockIndex, 1);
     save('asdp_techBlocks', techBlocks);
+  save('asdp_techPreAssigns', techPreAssignments);
     renderTechBlocks();
     return;
   }
@@ -736,6 +860,7 @@ $('planBtn').addEventListener('click', ()=>{
   localStorage.setItem('asdp_head',$('headTech').value||'');
   save('asdp_headBlocks', headBlocks);
   save('asdp_techBlocks', techBlocks);
+  save('asdp_techPreAssigns', techPreAssignments);
   plan();
 });
 
@@ -808,7 +933,7 @@ function plan(){
   const techBusyBlocks = technicians.map((_, i) => normalizeWorkBlocks(techBlocks[i] || []));
   const techBusyMinutes = techBusyBlocks.map(blocks => blocks.reduce((sum,b)=>sum + (b.end - b.start), 0));
   const techFreeCapacities = techBusyMinutes.map(busy => Math.max(0, _workEnd_offset - busy));
-  const totalCapacityMin = techFreeCapacities.reduce((sum, cap) => sum + cap, 0);
+  let totalCapacityMin = techFreeCapacities.reduce((sum, cap) => sum + cap, 0);
 
   let rawTasks = tasks.map((t, idx) => {
     const inputHours = parseFloat(t.hours) || 0;
@@ -818,6 +943,34 @@ function plan(){
     return { id: idx, name: t.name, inputHours, rawMin, headAlloc, isOpen: !!t.open,
       techWorkMinOriginal: techWorkMin, techWorkMinBeforeRound: techWorkMin, techWorkMin };
   });
+
+  normalizeTechPreAssignments();
+  const validPreAssigns = technicians.map((_, i) => []);
+  techPreAssignments.forEach((assigns, techIndex) => {
+    if (!validPreAssigns[techIndex]) return;
+    assigns.forEach(assign => {
+       const valid = normalizeWorkBlocks([assign]);
+       if (valid.length > 0) {
+         validPreAssigns[techIndex].push({ start: valid[0].start, end: valid[0].end, taskId: assign.taskId });
+       }
+    });
+  });
+
+  validPreAssigns.forEach((assigns, techIndex) => {
+    assigns.forEach(assign => {
+      const dur = assign.end - assign.start;
+      const rt = rawTasks[assign.taskId];
+      if (rt) {
+        rt.techWorkMinOriginal = Math.max(0, rt.techWorkMinOriginal - dur);
+        rt.techWorkMinBeforeRound = rt.techWorkMinOriginal;
+        rt.techWorkMin = rt.techWorkMinOriginal;
+      }
+      techBusyMinutes[techIndex] = (techBusyMinutes[techIndex] || 0) + dur;
+      techFreeCapacities[techIndex] = Math.max(0, techFreeCapacities[techIndex] - dur);
+    });
+  });
+  
+  totalCapacityMin = techFreeCapacities.reduce((sum, cap) => sum + cap, 0);
 
   const mandatoryTechWorkNeeded = rawTasks.filter(t => !t.isOpen).reduce((s, t) => s + t.techWorkMinOriginal, 0);
   const openTechWorkNeeded = rawTasks.filter(t => t.isOpen).reduce((s, t) => s + t.techWorkMinOriginal, 0);
@@ -887,6 +1040,16 @@ function plan(){
     blocks.forEach(block => tech.segments.push({ start: block.start, end: block.end, taskId: -1, taskName: 'DOLU' }));
   });
 
+  validPreAssigns.forEach((assigns, techIndex) => {
+    const tech = techObjs[techIndex];
+    if (!tech) return;
+    assigns.forEach(assign => {
+       const taskName = rawTasks[assign.taskId] ? rawTasks[assign.taskId].name : 'İş';
+       tech.segments.push({ start: assign.start, end: assign.end, taskId: assign.taskId, taskName: taskName });
+       tech.totalMin += (assign.end - assign.start);
+    });
+  });
+
   let tasksCopy = rawTasks.slice();
   const taskSegments = new Map();
   tasksCopy.forEach(t => taskSegments.set(t.id, []));
@@ -911,7 +1074,14 @@ function plan(){
 
       let remainingWork = techWork;
       while(remainingWork > 0) {
-        let targetBlockSize = isOpenFill ? 15 : Math.max(30, Math.ceil(remainingWork / Math.max(1, technicians.length)));
+        let targetBlockSize;
+        if (isOpenFill) {
+          targetBlockSize = 15;
+        } else if (algoMode === 'tech_priority') {
+          targetBlockSize = remainingWork;
+        } else {
+          targetBlockSize = Math.max(30, Math.ceil(remainingWork / Math.max(1, technicians.length)));
+        }
         targetBlockSize = ceil15x(targetBlockSize);
         let blockSize = Math.min(targetBlockSize, remainingWork);
         blockSize = Math.max(15, round15(blockSize));
@@ -986,8 +1156,10 @@ function plan(){
 
   function getTotals(){ return techObjs.map((t,i)=>({ idx:i, total:t.totalMin })); }
   let totals = getTotals();
-  let iter = 0;
-  while(iter < 200){
+  
+  if (algoMode === 'b1_priority') {
+    let iter = 0;
+    while(iter < 200){
     iter++;
     totals.sort((a,b)=>b.total - a.total);
     const maxTech = totals[0], minTech = totals[totals.length-1];
@@ -1028,10 +1200,11 @@ function plan(){
       }
     }
     if(!transferred) break;
+      mergeAndRecompute(techObjs);
+      totals = getTotals();
+    }
     mergeAndRecompute(techObjs);
-    totals = getTotals();
   }
-  mergeAndRecompute(techObjs);
 
   // PADDING PHASE: Equate technicians using up to 10% time extension (min 15m)
   totals = getTotals();
