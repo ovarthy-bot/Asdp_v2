@@ -28,6 +28,7 @@ let programNote = localStorage.getItem('asdp_programNote') || '';
 let planMode = localStorage.getItem('asdp_planMode') || 'all';
 let algoMode = localStorage.getItem('asdp_algoMode') || 'b1_priority';
 let techPreAssignments = load('asdp_techPreAssigns', []);
+if (algoMode === 'tech_priority') planMode = 'group'; // Teknisyen Öncelikli yöntemde Grup modu zorunlu
 
 const tasksDiv = $('tasks'), techsDiv = $('techs'), headBlocksDiv = $('headBlocks'), techBlocksDiv = $('techBlocks'), resultsDiv = $('results');
 const tasksStatDiv = $('tasksStat'), techsStatDiv = $('techsStat'), dupeWarnDiv = $('dupeWarn');
@@ -53,9 +54,19 @@ function normalizeTechRoles(){
 function applyModeUI(){
   document.body.classList.toggle('mode-all', planMode === 'all');
   document.body.classList.toggle('mode-group', planMode === 'group');
-  document.querySelectorAll('input[name="planMode"]').forEach(r => r.checked = (r.value === planMode));
+  const groupLocked = (algoMode === 'tech_priority');
+  document.querySelectorAll('input[name="planMode"]').forEach(r => {
+    r.checked = (r.value === planMode);
+    r.disabled = groupLocked && r.value === 'all';
+  });
+  document.querySelectorAll('#modeRow label').forEach(l => {
+    const locked = groupLocked && l.dataset.mode === 'all';
+    l.style.opacity = locked ? '0.45' : '';
+    l.style.cursor = locked ? 'not-allowed' : '';
+    l.title = locked ? 'Teknisyen Öncelikli yöntemde Supervisor Grup modu zorunludur' : '';
+  });
   document.querySelectorAll('#modeRow label').forEach(l => l.classList.toggle('active', l.dataset.mode === planMode));
-  $('modeSummaryNote').textContent = (planMode === 'all') ? 'Mevcut: Supervisor ALL' : 'Mevcut: Supervisor Grup';
+  $('modeSummaryNote').textContent = (planMode === 'all') ? 'Mevcut: Supervisor ALL' : (groupLocked ? 'Mevcut: Supervisor Grup (zorunlu)' : 'Mevcut: Supervisor Grup');
   const desc = $('modeDescription');
   if (planMode === 'all') {
     desc.innerHTML = 'Klasik mod: tek B1 teknisyen tüm işlerin sonunda 15dk onay süresi alır. Mevcut çalışma sistemi korunur.';
@@ -72,6 +83,10 @@ function applyAlgoUI(){
   document.querySelectorAll('#algoRow label').forEach(l => l.classList.toggle('active', l.dataset.algo === algoMode));
   const algoNote = $('algoSummaryNote');
   if (algoNote) algoNote.textContent = (algoMode === 'b1_priority') ? 'Mevcut: B1 Öncelikli' : 'Mevcut: Teknisyen Öncelikli';
+  const algoDesc = $('algoDescription');
+  if (algoDesc) algoDesc.innerHTML = (algoMode === 'b1_priority')
+    ? 'Her iş, süresine göre tüm teknisyenlere küçük parçalar halinde paylaştırılır ve teknisyenlerin toplam yükü eşitlenir.'
+    : "Her iş <strong>aynı saatte birlikte çalışan 2'li veya 3'lü ekiplere</strong> verilir (3 saat ve üzeri işlerde önce 3'lü, diğerlerinde önce 2'li ekip denenir; kişi başı pay en az 30 dk). Ekipte Supervisor varsa ekibi o denetler. Ekip kurulamazsa iş tek kişiye verilir (son tercih). <strong>Bu yöntemde Supervisor Grup modu zorunludur.</strong>";
 }
 
 function updateShiftSummary(){
@@ -376,9 +391,9 @@ updateBusySummary();
 
 // ---- Buttons ----
 $('addTask').addEventListener('click', ()=>{ tasks.push({ name:`NRC ${tasks.length+1}`, hours:1.0, open:false }); renderTasks(); });
-$('addTech').addEventListener('click', ()=>{ technicians.push(`Teknisyen ${technicians.length+1}`); techBlocks.push([]); techRoles.push('regular'); renderTechs(); renderTechBlocks(); });
-$('resetTasks').addEventListener('click', ()=>{ if(confirm('Tüm işleri sıfırlamak?')){ tasks=[]; renderTasks(); }});
-$('resetTechs').addEventListener('click', ()=>{ if(confirm('Tüm teknisyenleri sıfırlamak?')){ technicians=[]; techBlocks=[]; techRoles=[]; renderTechs(); renderTechBlocks(); }});
+$('addTech').addEventListener('click', ()=>{ technicians.push(`Teknisyen ${technicians.length+1}`); techBlocks.push([]); normalizeTechPreAssignments(); techRoles.push('regular'); renderTechs(); renderTechBlocks(); });
+$('resetTasks').addEventListener('click', ()=>{ if(confirm('Tüm işleri sıfırlamak?')){ tasks=[]; techPreAssignments=[]; renderTasks(); }});
+$('resetTechs').addEventListener('click', ()=>{ if(confirm('Tüm teknisyenleri sıfırlamak?')){ technicians=[]; techBlocks=[]; techRoles=[]; techPreAssignments=[]; renderTechs(); renderTechBlocks(); }});
 $('clearBreak').addEventListener('click', ()=>{ $('breakStart').value=''; $('breakEnd').value=''; breakStart=''; breakEnd=''; localStorage.removeItem('asdp_breakStart'); localStorage.removeItem('asdp_breakEnd'); updateShiftSummary(); });
 if ($('clearTeaBreak')) $('clearTeaBreak').addEventListener('click', ()=>{ $('teaBreakStart').value=''; $('teaBreakEnd').value=''; teaBreakStart=''; teaBreakEnd=''; localStorage.removeItem('asdp_teaBreakStart'); localStorage.removeItem('asdp_teaBreakEnd'); updateShiftSummary(); });
 $('addHeadBlock').addEventListener('click', ()=>{ headBlocks.push({start:'', end:''}); renderHeadBlocks(); });
@@ -421,6 +436,13 @@ document.querySelectorAll('input[name="planMode"]').forEach(r => r.addEventListe
 document.querySelectorAll('input[name="algoMode"]').forEach(r => r.addEventListener('change', e => {
   algoMode = e.target.value;
   localStorage.setItem('asdp_algoMode', algoMode);
+  // Teknisyen Öncelikli yöntem Supervisor Grup modu ile çalışır.
+  if (algoMode === 'tech_priority' && planMode !== 'group') {
+    planMode = 'group';
+    localStorage.setItem('asdp_planMode', planMode);
+    updateTechsStat();
+  }
+  applyModeUI();
   applyAlgoUI();
 }));
 
@@ -472,11 +494,13 @@ mainContainer.addEventListener('input', e => {
     updateTasksStat();
     updateTechsStat();
     renderDupeWarning();
+    if (f === 'name') renderPreAssigns();
   }
   if (f === 'tech') {
     save('asdp_techs', technicians);
     renderTechBlockSelect();
     renderTechBlocks();
+    renderPreAssigns();
     updateTechsStat();
   }
   if (f === 'headblock-start' || f === 'headblock-end') {
@@ -504,13 +528,24 @@ mainContainer.addEventListener('change', e => {
 
 mainContainer.addEventListener('click', e => {
   const delTask = e.target.closest('[data-del]');
-  if(delTask){ tasks.splice(+delTask.dataset.del,1); renderTasks(); return; }
+  if(delTask){
+    const delIdx = +delTask.dataset.del;
+    tasks.splice(delIdx,1);
+    // Manuel atamalardaki iş referanslarını yeni sıraya göre kaydır, silinen işe ait olanları kaldır.
+    techPreAssignments = (techPreAssignments || []).map(list => (list || [])
+      .filter(a => a.taskId !== delIdx)
+      .map(a => a.taskId > delIdx ? { ...a, taskId: a.taskId - 1 } : a));
+    save('asdp_techPreAssigns', techPreAssignments);
+    renderTasks();
+    return;
+  }
 
   const delTech = e.target.closest('[data-deltech]');
   if(delTech){
     const idx = +delTech.dataset.deltech;
     technicians.splice(idx,1);
     techBlocks.splice(idx,1);
+    if (Array.isArray(techPreAssignments)) techPreAssignments.splice(idx,1);
     if (Array.isArray(techRoles)) techRoles.splice(idx,1);
     save('asdp_techBlocks', techBlocks);
   save('asdp_techPreAssigns', techPreAssignments);
@@ -580,6 +615,15 @@ function realToWork(realMin){
   return work;
 }
 
+// Gerçek saati iş-zamanına çevirir; vardiya dışını sınıra, mola içini mola sınırına oturtur.
+function realToWorkClamp(realMin){
+  const shiftEReal = _shiftS_real + _workEnd_offset + _totalBreakLen;
+  const r = Math.min(Math.max(realMin, _shiftS_real), shiftEReal);
+  let work = r - _shiftS_real;
+  for (const b of _breaks) work -= Math.max(0, Math.min(r, b.e) - b.s);
+  return Math.min(Math.max(0, work), _workEnd_offset);
+}
+
 // ============================================================
 // Geometry helpers
 // ============================================================
@@ -636,7 +680,7 @@ function mergeAndRecompute(techObjs) {
       if(merged.length === 0) merged.push(s);
       else {
         const last = merged[merged.length-1];
-        if(last.taskId === s.taskId && last.end === s.start){
+        if(last.taskId === s.taskId && last.end === s.start && !!last.locked === !!s.locked){
           last.end = s.end;
         } else merged.push(s);
       }
@@ -785,7 +829,7 @@ function relocateSupervisorWork(techObjs, roles, gapStart, gapEnd){
     if (!isFreeRange(sup, gapStart, gapStart + slot)) continue;
 
     const movable = sup.segments
-      .filter(s => s.taskId !== -1)
+      .filter(s => s.taskId !== -1 && !s.locked)
       .filter(s => !(s.start < gapStart + slot && s.end > gapStart))
       .sort((a, b) => (a.end - a.start) - (b.end - b.start));
 
@@ -821,7 +865,7 @@ function ensureNoIdleTech(techObjs, roles, isGroup){
     if (!donor) return;
 
     const movable = donor.segments
-      .filter(s => s.taskId !== -1 && (s.end - s.start) >= 30)
+      .filter(s => s.taskId !== -1 && !s.locked && (s.end - s.start) >= 30)
       .sort((a, b) => (a.end - a.start) - (b.end - b.start));
     if (movable.length === 0) return;
 
@@ -906,6 +950,11 @@ function plan(){
   if(_workEnd_offset <= 0) { resultsDiv.innerHTML = `<div class="warning">Vardiya çok kısa / mola çok uzun - plan yapılamıyor.</div>`; return; }
 
   const HEAD_MIN = 15;
+  if (algoMode === 'tech_priority' && planMode !== 'group') {
+    planMode = 'group';
+    localStorage.setItem('asdp_planMode', planMode);
+    applyModeUI();
+  }
   const isGroup = (planMode === 'group');
 
   function normalizeWorkBlocks(blocks) {
@@ -914,11 +963,9 @@ function plan(){
       const s_real = t2m(block.start);
       const e_real = t2m(block.end);
       if (s_real === null || e_real === null || e_real <= s_real) return;
-      const s_work = realToWork(s_real);
-      const e_work = realToWork(e_real);
-      if (s_work !== null && e_work !== null && e_work > s_work) {
-        valid.push({ start: Math.max(0, s_work), end: Math.min(_workEnd_offset, e_work) });
-      }
+      const s_work = realToWorkClamp(s_real);
+      const e_work = realToWorkClamp(e_real);
+      if (e_work > s_work) valid.push({ start: s_work, end: e_work });
     });
     valid.sort((a,b)=>a.start-b.start);
     const merged = [];
@@ -944,15 +991,25 @@ function plan(){
       techWorkMinOriginal: techWorkMin, techWorkMinBeforeRound: techWorkMin, techWorkMin };
   });
 
+  // ---- Manuel (önceden) iş atamaları: sabit, algoritma bunları taşımaz ----
   normalizeTechPreAssignments();
-  const validPreAssigns = technicians.map((_, i) => []);
+  const validPreAssigns = technicians.map(() => []);
+  const techPreAssignMinutes = technicians.map(() => 0);
+  const preAssignWarnings = [];
   techPreAssignments.forEach((assigns, techIndex) => {
     if (!validPreAssigns[techIndex]) return;
-    assigns.forEach(assign => {
-       const valid = normalizeWorkBlocks([assign]);
-       if (valid.length > 0) {
-         validPreAssigns[techIndex].push({ start: valid[0].start, end: valid[0].end, taskId: assign.taskId });
-       }
+    const techName = technicians[techIndex] || ('Teknisyen ' + (techIndex + 1));
+    (assigns || []).forEach(assign => {
+      const rt = rawTasks[assign.taskId];
+      const label = `${escHtml(techName)} – ${escHtml(rt ? rt.name : 'Silinmiş iş')} (${escHtml(assign.start || '?')}-${escHtml(assign.end || '?')})`;
+      if (!rt) { preAssignWarnings.push(`${label}: iş listede yok, atlandı.`); return; }
+      const valid = normalizeWorkBlocks([assign]);
+      if (valid.length === 0) { preAssignWarnings.push(`${label}: vardiya dışında veya tamamen molada, atlandı.`); return; }
+      const { start, end } = valid[0];
+      const clash = techBusyBlocks[techIndex].some(b => start < b.end && end > b.start)
+        || validPreAssigns[techIndex].some(p => start < p.end && end > p.start);
+      if (clash) { preAssignWarnings.push(`${label}: dolu saat veya başka bir manuel atamayla çakışıyor, atlandı.`); return; }
+      validPreAssigns[techIndex].push({ start, end, taskId: assign.taskId });
     });
   });
 
@@ -960,16 +1017,15 @@ function plan(){
     assigns.forEach(assign => {
       const dur = assign.end - assign.start;
       const rt = rawTasks[assign.taskId];
-      if (rt) {
-        rt.techWorkMinOriginal = Math.max(0, rt.techWorkMinOriginal - dur);
-        rt.techWorkMinBeforeRound = rt.techWorkMinOriginal;
-        rt.techWorkMin = rt.techWorkMinOriginal;
-      }
-      techBusyMinutes[techIndex] = (techBusyMinutes[techIndex] || 0) + dur;
+      rt.techWorkMinOriginal = Math.max(0, rt.techWorkMinOriginal - dur);
+      rt.techWorkMinBeforeRound = rt.techWorkMinOriginal;
+      rt.techWorkMin = rt.techWorkMinOriginal;
+      rt.preAssignedMin = (rt.preAssignedMin || 0) + dur;
+      techPreAssignMinutes[techIndex] += dur;
       techFreeCapacities[techIndex] = Math.max(0, techFreeCapacities[techIndex] - dur);
     });
   });
-  
+
   totalCapacityMin = techFreeCapacities.reduce((sum, cap) => sum + cap, 0);
 
   const mandatoryTechWorkNeeded = rawTasks.filter(t => !t.isOpen).reduce((s, t) => s + t.techWorkMinOriginal, 0);
@@ -1031,7 +1087,7 @@ function plan(){
     name, index,
     role: isGroup ? (techRoles[index] || 'regular') : 'all',
     segments: [], totalMin: 0,
-    busyMin: techBusyMinutes[index] || 0,
+    busyMin: (techBusyMinutes[index] || 0) + (techPreAssignMinutes[index] || 0),
     freeCapacity: techFreeCapacities[index] || 0
   }));
   techBusyBlocks.forEach((blocks, techIndex) => {
@@ -1045,7 +1101,7 @@ function plan(){
     if (!tech) return;
     assigns.forEach(assign => {
        const taskName = rawTasks[assign.taskId] ? rawTasks[assign.taskId].name : 'İş';
-       tech.segments.push({ start: assign.start, end: assign.end, taskId: assign.taskId, taskName: taskName });
+       tech.segments.push({ start: assign.start, end: assign.end, taskId: assign.taskId, taskName: taskName, locked: true });
        tech.totalMin += (assign.end - assign.start);
     });
   });
@@ -1062,6 +1118,122 @@ function plan(){
       if (a.totalMin !== b.totalMin) return a.totalMin - b.totalMin;
       if ((b.freeCapacity || 0) !== (a.freeCapacity || 0)) return (b.freeCapacity || 0) - (a.freeCapacity || 0);
       return a.index - b.index;
+    });
+  }
+
+  // ============================================================
+  // Teknisyen Öncelikli: zaman bazlı 2'li / 3'lü ekip ataması
+  // ------------------------------------------------------------
+  // Her olay anında (vardiya başı, bir parçanın bitişi) o an boşta olan herkes
+  // 2'li/3'lü ekiplere bölünür. Ekip üyeleri aynı işe aynı saatte başlar ve eşit
+  // süre çalışıp birlikte biter. Artakalan tek kişi önce devam eden 2'li bir
+  // ekibe katılır (ekip 3'lü olur ve daha erken biter); tek başına çalışma ancak
+  // hiçbir ekibe katılamıyorsa ve yalnızca bir sonraki olaya kadar yapılır.
+  // ============================================================
+  function freeRunAt(tech, t){
+    if (tech.segments.some(s => s.start <= t && s.end > t)) return 0;
+    let e = _workEnd_offset;
+    tech.segments.forEach(s => { if (s.start >= t && s.start < e) e = s.start; });
+    return e - t;
+  }
+  function coverageRunAt(t){
+    const c = buildSupervisorCoverage(techObjs, techRoles).find(([cs, ce]) => cs <= t && ce > t);
+    return c ? c[1] - t : 0;
+  }
+  function placeTeamSeg(tech, start, end, item){
+    tech.segments.push({ start, end, taskId: item.task.id, taskName: item.task.name });
+    tech.totalMin += end - start;
+    taskSegments.get(item.task.id).push({ techIndex: tech.index, start, end });
+  }
+
+  function scheduleTeamsTimeFirst(taskList){
+    const queue = taskList.filter(t => t.techWorkMin > 0).map(t => ({ task: t, rem: t.techWorkMin }));
+    const nextItem = () => queue.filter(q => q.rem >= 15).sort((a, b) => b.rem - a.rem || a.task.id - b.task.id)[0];
+    const active = [];
+    const byLoad = (a, b) => a.totalMin - b.totalMin || a.index - b.index;
+    const roleRank = { supervisor: 0, qualified: 1, regular: 2 };
+
+    let t = 0;
+    for (let guard = 0; guard < 5000 && t < _workEnd_offset && nextItem(); guard++) {
+      // 1) Boştakileri 2'li/3'lü ekiplere böl (4 → 2+2, 5 → 3+2, 7 → 3+2+2 ...)
+      const free = techObjs.filter(x => freeRunAt(x, t) >= 15)
+        .sort((a, b) => roleRank[a.role] - roleRank[b.role] || byLoad(a, b));
+      if (free.length >= 2) {
+        const m = Math.ceil(free.length / 3);
+        const teams = Array.from({ length: m }, () => []);
+        free.forEach((x, i) => teams[i % m].push(x));
+        // Supervisor'lü ekipler önce yerleşir ki diğer ekipler onların denetim penceresini kullanabilsin.
+        teams.sort((a, b) => (b.some(x => x.role === 'supervisor') - a.some(x => x.role === 'supervisor')) || b.length - a.length);
+        for (let members of teams) {
+          const item = nextItem();
+          if (!item) break;
+          let run = Math.min(...members.map(x => freeRunAt(x, t)));
+          if (!members.some(x => x.role === 'supervisor') && members.some(x => x.role === 'regular')) {
+            const cr = coverageRunAt(t);
+            if (cr >= 15) run = Math.min(run, cr);
+            else {
+              members = members.filter(x => x.role !== 'regular');
+              if (!members.length) continue;
+              run = Math.min(...members.map(x => freeRunAt(x, t)));
+            }
+          }
+          members = members.slice(0, Math.max(1, Math.min(members.length, Math.floor(item.rem / 15))));
+          const share = Math.min(ceil15x(item.rem / members.length), floor15(run));
+          if (share < 15) continue;
+          members.forEach(x => placeTeamSeg(x, t, t + share, item));
+          item.rem -= share * members.length;
+          if (members.length >= 2) active.push({ item, members, start: t, end: t + share });
+        }
+      }
+
+      // 2) Artakalan tek kişi: devam eden 2'li bir ekibe katıl, olmazsa kısa süre tek başına çalış.
+      for (const lone of techObjs.filter(x => freeRunAt(x, t) >= 15)) {
+        const loneRun = freeRunAt(lone, t);
+        let joined = false;
+        const joinable = active.filter(a => a.members.length === 2 && a.start <= t && a.end - t >= 30)
+          .sort((a, b) => b.end - a.end);
+        for (const a of joinable) {
+          const k = a.members.length;
+          const newEnd = t + ceil15x(k * (a.end - t) / (k + 1));
+          if (newEnd >= a.end || loneRun < newEnd - t) continue;
+          if (lone.role === 'regular' && !a.members.some(x => x.role === 'supervisor') && coverageRunAt(t) < newEnd - t) continue;
+          a.members.forEach(x => {
+            const seg = x.segments.find(sg => sg.taskId === a.item.task.id && sg.end === a.end && sg.start <= t);
+            if (seg) { seg.end = newEnd; x.totalMin -= (a.end - newEnd); }
+          });
+          placeTeamSeg(lone, t, newEnd, a.item);
+          a.item.rem -= (newEnd - t) - k * (a.end - newEnd);
+          a.members.push(lone);
+          a.end = newEnd;
+          joined = true;
+          break;
+        }
+        if (joined) continue;
+
+        const item = nextItem();
+        if (!item) break;
+        let nextEvent = _workEnd_offset;
+        techObjs.forEach(x => { if (x !== lone) x.segments.forEach(sg => { if (sg.end > t && sg.end < nextEvent) nextEvent = sg.end; }); });
+        let limit = Math.min(loneRun, nextEvent - t);
+        if (lone.role === 'regular') limit = Math.min(limit, coverageRunAt(t));
+        const dur = Math.min(floor15(limit), ceil15x(item.rem));
+        if (dur < 15) continue;
+        placeTeamSeg(lone, t, t + dur, item);
+        item.rem -= dur;
+      }
+
+      // 3) Bir sonraki olay anına geç
+      let nextT = Infinity;
+      techObjs.forEach(x => x.segments.forEach(sg => {
+        if (sg.end > t && sg.end < nextT) nextT = sg.end;
+        if (sg.start > t && sg.start < nextT) nextT = sg.start;
+      }));
+      if (!Number.isFinite(nextT)) break;
+      t = nextT;
+    }
+
+    queue.filter(q => q.rem >= 15).forEach(q => {
+      if (!q.task.isOpen) unallocated.push({ taskId: q.task.id, task: q.task.name, minutes: q.rem, reason: 'Teknisyen kapasitesi doldu; mümkün olan kısım teknisyenlere dağıtıldı' });
     });
   }
 
@@ -1108,7 +1280,7 @@ function plan(){
             }
             if (result) {
               taskSegments.get(task.id).push({ techIndex: tech.index, start: result.start, end: result.end });
-              remainingWork -= finalSize;
+              remainingWork -= (result.end - result.start);
               placed = true;
               break;
             }
@@ -1130,7 +1302,7 @@ function plan(){
             }
             if (result) {
               taskSegments.get(task.id).push({ techIndex: tech.index, start: result.start, end: result.end });
-              remainingWork -= finalSize;
+              remainingWork -= (result.end - result.start);
               placed = true;
               break;
             }
@@ -1148,7 +1320,13 @@ function plan(){
   const mandatoryTasks = tasksCopy.filter(t => !t.isOpen).sort((a, b) => b.techWorkMin - a.techWorkMin);
   const openTasks = tasksCopy.filter(t => t.isOpen).sort((a, b) => a.techWorkMin - b.techWorkMin || a.id - b.id);
 
-  scheduleTaskList(mandatoryTasks, { openFill:false });
+  if (algoMode === 'tech_priority') {
+    scheduleTeamsTimeFirst(mandatoryTasks);
+    // OPEN işler de kalan boşluklara ekip halinde yerleşir.
+    scheduleTeamsTimeFirst(openTasks);
+  } else {
+    scheduleTaskList(mandatoryTasks, { openFill:false });
+  }
   mergeAndRecompute(techObjs);
 
   if (isGroup) repairCoverage(techObjs, techRoles);
@@ -1173,7 +1351,7 @@ function plan(){
     donor.segments.sort((a,b) => (a.end - a.start) - (b.end - b.start));
     for(let si = 0; si < donor.segments.length; si++){
       const seg = donor.segments[si];
-      if (seg.taskId === -1) continue;
+      if (seg.taskId === -1 || seg.locked) continue;
       const segDuration = seg.end - seg.start;
       if(segDuration >= 15){
         let transferAmount = floor15(diff / 2);
@@ -1206,47 +1384,47 @@ function plan(){
     mergeAndRecompute(techObjs);
   }
 
-  // PADDING PHASE: Equate technicians using up to 10% time extension (min 15m)
+  // PADDING PHASE: Teknisyenleri eşitlemek için işler en fazla %10 (min 15dk) uzatılır.
+  // Uzatma mevcut parçanın sonuna eklenir; manuel (kilitli) parçalar uzatılmaz.
+  const taskPadding = new Map();
+  function tryExtendSegment(tech, seg){
+    if (seg.taskId === -1 || seg.taskId == null || seg.locked) return false;
+    const task = rawTasks.find(t => t.id === seg.taskId);
+    if (!task) return false;
+    const maxPad = Math.max(15, ceil15x(task.techWorkMinOriginal * 0.10));
+    const currentPad = taskPadding.get(seg.taskId) || 0;
+    if (currentPad + 15 > maxPad) return false;
+    if (!isFreeRange(tech, seg.end, seg.end + 15)) return false;
+    if (isGroup && tech.role === 'regular') {
+      const coverage = buildSupervisorCoverage(techObjs, techRoles);
+      if (!coverage.some(([cs, ce]) => seg.end >= cs && (seg.end + 15) <= ce)) return false;
+    }
+    seg.end += 15;
+    tech.totalMin += 15;
+    taskPadding.set(seg.taskId, currentPad + 15);
+    return true;
+  }
+
   totals = getTotals();
   totals.sort((a,b)=>b.total - a.total);
   const targetTotal = totals[0].total;
 
-  for (let i = 1; i < totals.length; i++) {
+  // Teknisyen Öncelikli modda ekip üyelerinin eşit süresi bozulmasın diye tek kişilik uzatma yapılmaz.
+  for (let i = 1; i < totals.length && algoMode === 'b1_priority'; i++) {
     const tech = techObjs[totals[i].idx];
     let deficit = targetTotal - tech.totalMin;
     while (deficit >= 15) {
       let padded = false;
-      for (let si = 0; si < tech.segments.length && deficit >= 15; si++) {
-        const seg = tech.segments[si];
-        if (seg.taskId === -1) continue;
-        const task = rawTasks.find(t => t.id === seg.taskId);
-        if (!task) continue;
-        const allowedPad = Math.max(15, ceil15x(task.rawMin * 0.10));
-        if (allowedPad >= 15) {
-          let padAttempt;
-          if (isGroup && tech.role === 'regular') {
-             const cov = buildSupervisorCoverage(techObjs, techRoles);
-             if (cov.length > 0) padAttempt = placeOnTech(tech, 15, seg.taskId, seg.taskName, { coverage: cov });
-             if (!padAttempt) padAttempt = placeOnTech(tech, 15, seg.taskId, seg.taskName);
-          } else {
-             padAttempt = placeOnTech(tech, 15, seg.taskId, seg.taskName);
-          }
-          if (padAttempt) {
-             deficit -= 15;
-             const arr = taskSegments.get(seg.taskId) || [];
-             arr.push({ techIndex: tech.index, start: padAttempt.start, end: padAttempt.end });
-             taskSegments.set(seg.taskId, arr);
-             padded = true;
-             break; // restart outer while loop to evaluate deficit
-          }
-        }
+      for (const seg of tech.segments.slice()) {
+        if (tryExtendSegment(tech, seg)) { deficit -= 15; padded = true; break; }
       }
-      if (!padded) break; // could not pad further
+      if (!padded) break;
     }
   }
   mergeAndRecompute(techObjs);
 
-  ensureNoIdleTech(techObjs, techRoles, isGroup);
+  // Teknisyen Öncelikli modda işleri 15dk'lık parçalara bölmemek için boştaki teknisyene parça aktarılmaz.
+  if (algoMode === 'b1_priority') ensureNoIdleTech(techObjs, techRoles, isGroup);
   if (isGroup) repairCoverage(techObjs, techRoles);
   mergeAndRecompute(techObjs);
 
@@ -1438,7 +1616,7 @@ function plan(){
       const merged = [];
       for (const s of obj.segments) {
         const last = merged[merged.length - 1];
-        if (last && last.taskId === s.taskId && last.end === s.start) {
+        if (last && last.taskId === s.taskId && last.end === s.start && !!last.locked === !!s.locked) {
           last.end = s.end;
         } else {
           merged.push({...s});
@@ -1452,7 +1630,7 @@ function plan(){
       return tasksCopy
         .filter(t => t.isOpen && t.rawMin > 0)
         .sort((a,b) => Math.max(15, ceil15x(a.rawMin)) - Math.max(15, ceil15x(b.rawMin)) || a.id - b.id)
-        .map(t => ({ task: t, remaining: Math.max(15, ceil15x(t.rawMin)) }));
+        .map(t => ({ task: t, remaining: Math.max(0, Math.max(15, ceil15x(t.rawMin)) - assignedTaskMinutesOnTechnicians(t.id)) }));
     }
 
     function remainingOpenPool(pool){
@@ -1530,7 +1708,7 @@ function plan(){
     techObjs.forEach(tech => {
       const kept = [];
       for (const seg of tech.segments) {
-        if (seg.taskId === -1 || seg.taskId == null || taskIdsWithB1.has(seg.taskId) || (tasksCopy.find(t => t.id === seg.taskId)?.isOpen)) kept.push(seg);
+        if (seg.taskId === -1 || seg.taskId == null || seg.locked || taskIdsWithB1.has(seg.taskId) || (tasksCopy.find(t => t.id === seg.taskId)?.isOpen)) kept.push(seg);
         else removedByB1Rule.add(seg.taskId);
       }
       tech.segments = kept;
@@ -1544,8 +1722,7 @@ function plan(){
       }
     });
 
-    const taskPadding = new Map();
-    let paddedAny = true;
+    let paddedAny = (algoMode === 'b1_priority');
     let guardPad = 0;
     while(paddedAny && guardPad < 1000) {
       paddedAny = false;
@@ -1556,7 +1733,7 @@ function plan(){
         
         for (let i = 0; i < tech.segments.length; i++) {
           const seg = tech.segments[i];
-          if (seg.taskId === -1 || seg.taskId == null) continue;
+          if (seg.taskId === -1 || seg.taskId == null || seg.locked) continue;
           const taskObj = tasksCopy.find(t => t.id === seg.taskId);
           if (!taskObj) continue;
           
@@ -1620,7 +1797,7 @@ function plan(){
     t.segments.forEach(s => {
       if (s.taskId == null || s.taskId === -1) return;
       const real = { startReal: workToReal(s.start), endReal: workToReal(s.end) };
-      perTech[idx].segs.push({ task: tasks[s.taskId].name, start: real.startReal, end: real.endReal, _ws: s.start, _we: s.end });
+      perTech[idx].segs.push({ taskId: s.taskId, task: tasks[s.taskId].name, start: real.startReal, end: real.endReal, _ws: s.start, _we: s.end, locked: !!s.locked });
       let segmentDuration = real.endReal - real.startReal;
       for (const b of _breaks) {
         if (real.startReal < b.e && real.endReal > b.s) {
@@ -1635,19 +1812,24 @@ function plan(){
 
   let html = '';
   const totalInputHours = tasks.reduce((s,t)=>s + (parseFloat(t.hours)||0),0);
-  html += `<div class="card"><div class="small">Mod: <strong>${isGroup ? 'Supervisor Grup' : 'Supervisor ALL'}</strong> – Toplam İş: <strong>${tasks.length}</strong> – Girdi Toplam Süre: <strong>${totalInputHours.toFixed(2)} saat</strong></div></div>`;
+  html += `<div class="card"><div class="small">Mod: <strong>${isGroup ? 'Supervisor Grup' : 'Supervisor ALL'}</strong> – Algoritma: <strong>${algoMode === 'tech_priority' ? 'Teknisyen Öncelikli' : 'B1 Öncelikli'}</strong> – Toplam İş: <strong>${tasks.length}</strong> – Girdi Toplam Süre: <strong>${totalInputHours.toFixed(2)} saat</strong></div></div>`;
 
   // Capacity table
   const busyRows = technicians.map((name, i) => {
     const busyH = minutesToHoursStr(techBusyMinutes[i] || 0);
     const freeH = minutesToHoursStr(techFreeCapacities[i] || 0);
     const role = isGroup ? `<span class="role-tag ${techRoles[i] || 'regular'}">${techRoles[i] === 'supervisor' ? 'Supervisor' : techRoles[i] === 'qualified' ? 'Kalifiyeli' : 'Teknisyen'}</span>` : '';
-    return `<tr><td><strong>${escHtml(name)}</strong>${role}</td><td>${busyH}</td><td>${freeH}</td></tr>`;
+    const preH = minutesToHoursStr(techPreAssignMinutes[i] || 0);
+    return `<tr><td><strong>${escHtml(name)}</strong>${role}</td><td>${busyH}</td><td>${preH}</td><td>${freeH}</td></tr>`;
   }).join('');
   html += `<details class="collapsible" open><summary>⏱️ Teknisyen Net Kapasite Kontrolü</summary><div class="body">
     <div class="small" style="color:var(--muted);margin-bottom:8px">Dolu saatler iş ataması için kapalıdır ve toplam yüke eklenmez.</div>
-    <table class="table"><tr><th>Teknisyen</th><th>Dolu Saat</th><th>Kullanılabilir Saat</th></tr>${busyRows}</table>
+    <table class="table"><tr><th>Teknisyen</th><th>Dolu Saat</th><th>Manuel Atama</th><th>Kullanılabilir Saat</th></tr>${busyRows}</table>
   </div></details>`;
+
+  if (preAssignWarnings.length > 0) {
+    html += `<div class="warning"><strong>📌 Uygulanamayan Manuel Atamalar</strong><br>${preAssignWarnings.map(w => `<div class="small">• ${w}</div>`).join('')}</div>`;
+  }
 
   // Capacity scaling note
   if (capacityExceeded) {
@@ -1702,7 +1884,7 @@ function plan(){
     if (p.segs.length) {
       body = '<div class="program-table">' + p.segs.map(s => {
         let line = `<div class="program-seg">
-          <span class="program-task">${escHtml(s.task)}</span>
+          <span class="program-task">${s.locked ? '<span title="Manuel atama">📌 </span>' : ''}${escHtml(s.task)}</span>
           <span class="program-time">${m2t(s.start)} - ${m2t(s.end)}</span>
         </div>`;
         if (isGroup && p.role === 'regular') {
@@ -1871,6 +2053,17 @@ function plan(){
     calisma_sistemi: isGroup ? "Grup (Supervisor Denetimli)" : "Herkes Bağımsız",
     toplam_is_sayisi: tasks.length,
     toplam_sure: totalInputHours.toFixed(2) + " saat",
+    girilen_isler: tasks.map((t, i) => ({
+      is_no: t.name,
+      girilen_sure: (parseFloat(t.hours) || 0).toFixed(2) + " saat",
+      tip: t.open ? "OPEN" : "Zorunlu",
+      teknisyen_atamalari: perTech.flatMap(p => p.segs
+        .filter(s => s.taskId === i)
+        .map(s => ({ teknisyen: p.name, baslangic: m2t(s.start), bitis: m2t(s.end) })))
+        .sort((a, b) => a.baslangic.localeCompare(b.baslangic)),
+      b1_onay: headObj ? headObj.segments.filter(s => s.taskId === i)
+        .map(s => ({ baslangic: m2t(workToReal(s.start)), bitis: m2t(workToReal(s.end)) })) : []
+    })),
     teknisyen_atamalari: perTech.map(p => ({
       teknisyen: p.name,
       rol: p.role,

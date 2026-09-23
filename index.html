@@ -34,6 +34,7 @@
         <label data-algo="b1_priority"><input type="radio" name="algoMode" value="b1_priority"> B1 Öncelikli Yöntem <span class="small" style="margin-left:6px">(İşler süreye göre eşit paylaştırılır)</span></label>
         <label data-algo="tech_priority"><input type="radio" name="algoMode" value="tech_priority"> Teknisyen Öncelikli Yöntem <span class="small" style="margin-left:6px">(Teknisyene bölmeden tam iş atamaya çalışır)</span></label>
       </div>
+      <div class="small" id="algoDescription" style="margin-top:8px;color:var(--muted)"></div>
     </div>
   </details>
 
@@ -114,6 +115,7 @@
         <input type="time" id="preAssignEnd">
         <button class="btn btn-add" id="addPreAssign" style="padding:8px 12px;font-size:0.9rem;">+ Ekle</button>
       </div>
+      <div class="small" style="margin-top:6px;color:var(--muted)">Girilen blok sabittir; algoritma onu taşımaz ve işin kalan süresini diğer teknisyenlere dağıtır.</div>
       <div id="preAssigns" style="margin-top:8px;"></div>
     </div>
   </details>
