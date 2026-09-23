@@ -1153,6 +1153,44 @@ function plan(){
     const byLoad = (a, b) => a.totalMin - b.totalMin || a.index - b.index;
     const roleRank = { supervisor: 0, qualified: 1, regular: 2 };
 
+    // Parça kuralları: bir parça en fazla yarım gün (herkesin günü en az 2 parça olsun),
+    // mümkünse kişi başı en az 1 saat (kırıntı parça olmasın). İşi bitirecek son parça
+    // yarım günü en fazla 45dk aşabilir ki arkasında küçük bir artık kalmasın.
+    const PIECE_CAP = Math.max(60, floor15(_workEnd_offset / 2));
+    const MIN_PIECE = 60;
+    // B1 onayları sıkışmasın diye işlerin bitiş saatleri en az 30dk arayla tutulur.
+    const finishTimes = [];
+    const finishClash = e => finishTimes.some(f => Math.abs(f - e) < 30);
+
+    function planPiece(item, members, run){
+      const k = Math.max(1, Math.min(members.length, Math.floor(item.rem / MIN_PIECE)));
+      let share = ceil15x(item.rem / k);
+      if (share > PIECE_CAP + 45) share = PIECE_CAP;
+      share = Math.min(share, floor15(run));
+      return { k, share, finishes: share * k >= item.rem };
+    }
+
+    // Ekip için iş seçimi sırası:
+    //  1) Üyelerin az önce bitirdiği iş tekrar verilmez (iki parça birleşip tek parça olmasın).
+    //  2) Bu parçayla bitebilen işler öne alınır: küçük işler günün erken saatlerinde biter,
+    //     böylece B1 onayları güne yayılır.
+    //  3) Büyük iş önce. Bitişi başka bir işin bitişine 30dk'dan yakın düşecekse sona bırakılır.
+    function pickForTeam(members, run){
+      const lastTasks = new Set();
+      members.forEach(x => x.segments.forEach(sg => { if (sg.end === t && sg.taskId !== -1) lastTasks.add(sg.taskId); }));
+      const cands = queue.filter(q => q.rem >= 15)
+        .map(item => ({ item, ...planPiece(item, members, run) }))
+        .filter(c => c.share >= 15)
+        .map(c => ({ ...c, rank: [
+          (c.finishes && finishClash(t + c.share)) ? 1 : 0,
+          lastTasks.has(c.item.task.id) ? 1 : 0,
+          c.finishes ? 0 : 1
+        ] }))
+        .sort((a, b) => a.rank[0] - b.rank[0] || a.rank[1] - b.rank[1] || a.rank[2] - b.rank[2]
+          || b.item.rem - a.item.rem || a.item.task.id - b.item.task.id);
+      return cands[0] || null;
+    }
+
     let t = 0;
     for (let guard = 0; guard < 5000 && t < _workEnd_offset && nextItem(); guard++) {
       // 1) Boştakileri 2'li/3'lü ekiplere böl (4 → 2+2, 5 → 3+2, 7 → 3+2+2 ...)
@@ -1165,8 +1203,7 @@ function plan(){
         // Supervisor'lü ekipler önce yerleşir ki diğer ekipler onların denetim penceresini kullanabilsin.
         teams.sort((a, b) => (b.some(x => x.role === 'supervisor') - a.some(x => x.role === 'supervisor')) || b.length - a.length);
         for (let members of teams) {
-          const item = nextItem();
-          if (!item) break;
+          if (!nextItem()) break;
           let run = Math.min(...members.map(x => freeRunAt(x, t)));
           if (!members.some(x => x.role === 'supervisor') && members.some(x => x.role === 'regular')) {
             const cr = coverageRunAt(t);
@@ -1177,12 +1214,14 @@ function plan(){
               run = Math.min(...members.map(x => freeRunAt(x, t)));
             }
           }
-          members = members.slice(0, Math.max(1, Math.min(members.length, Math.floor(item.rem / 15))));
-          const share = Math.min(ceil15x(item.rem / members.length), floor15(run));
-          if (share < 15) continue;
+          const pick = pickForTeam(members, run);
+          if (!pick) continue;
+          const { item, share } = pick;
+          members = members.slice(0, pick.k);
           members.forEach(x => placeTeamSeg(x, t, t + share, item));
           item.rem -= share * members.length;
-          if (members.length >= 2) active.push({ item, members, start: t, end: t + share });
+          if (pick.finishes) finishTimes.push(t + share);
+          if (members.length >= 2) active.push({ item, members, start: t, end: t + share, finishes: pick.finishes });
         }
       }
 
@@ -1197,12 +1236,21 @@ function plan(){
           const newEnd = t + ceil15x(k * (a.end - t) / (k + 1));
           if (newEnd >= a.end || loneRun < newEnd - t) continue;
           if (lone.role === 'regular' && !a.members.some(x => x.role === 'supervisor') && coverageRunAt(t) < newEnd - t) continue;
-          a.members.forEach(x => {
-            const seg = x.segments.find(sg => sg.taskId === a.item.task.id && sg.end === a.end && sg.start <= t);
-            if (seg) { seg.end = newEnd; x.totalMin -= (a.end - newEnd); }
-          });
+          const fi = a.finishes ? finishTimes.indexOf(a.end) : -1;
+          if (fi >= 0 && finishTimes.some((f, i) => i !== fi && Math.abs(f - newEnd) < 30)) continue;
+          const segs = a.members.map(x => x.segments.find(sg => sg.taskId === a.item.task.id && sg.end === a.end && sg.start <= t));
+          segs.forEach(seg => { if (seg) seg.end = newEnd; });
+          // Ekip erken bitince, bu ekipteki Supervisor'e güvenen başka Teknisyenler denetimsiz kalmamalı.
+          if (a.members.some(x => x.role === 'supervisor')) {
+            const cov = buildSupervisorCoverage(techObjs, techRoles);
+            const broken = techObjs.some(x => x.role === 'regular' && x.segments.some(sg =>
+              sg.taskId !== -1 && findGaps(sg.start, sg.end, cov).length > 0));
+            if (broken) { segs.forEach(seg => { if (seg) seg.end = a.end; }); continue; }
+          }
+          a.members.forEach((x, i) => { if (segs[i]) x.totalMin -= (a.end - newEnd); });
           placeTeamSeg(lone, t, newEnd, a.item);
           a.item.rem -= (newEnd - t) - k * (a.end - newEnd);
+          if (fi >= 0) finishTimes[fi] = newEnd;
           a.members.push(lone);
           a.end = newEnd;
           joined = true;
@@ -1216,10 +1264,11 @@ function plan(){
         techObjs.forEach(x => { if (x !== lone) x.segments.forEach(sg => { if (sg.end > t && sg.end < nextEvent) nextEvent = sg.end; }); });
         let limit = Math.min(loneRun, nextEvent - t);
         if (lone.role === 'regular') limit = Math.min(limit, coverageRunAt(t));
-        const dur = Math.min(floor15(limit), ceil15x(item.rem));
+        const dur = Math.min(floor15(limit), ceil15x(item.rem), PIECE_CAP);
         if (dur < 15) continue;
         placeTeamSeg(lone, t, t + dur, item);
         item.rem -= dur;
+        if (item.rem <= 0) finishTimes.push(t + dur);
       }
 
       // 3) Bir sonraki olay anına geç
@@ -1579,6 +1628,12 @@ function plan(){
       const exactStart = Math.max(0, taskEnd - headNeeded);
       let attempt = scheduleExactWindow(headObj, exactStart, taskEnd, t.id, t.name);
       if (!attempt) attempt = tryScheduleOnTechNotBefore(headObj, headNeeded, t.id, t.name, taskEnd);
+      if (!attempt) {
+        // Bitişten sonra yer yoksa, bitişe en yakın (en geç) boş B1 dilimi kullanılır.
+        for (let s = floor15(taskEnd - headNeeded); s >= 0 && !attempt; s -= 15) {
+          attempt = scheduleExactWindow(headObj, s, s + headNeeded, t.id, t.name);
+        }
+      }
       if (attempt) headAssignments.push({ taskId: t.id, taskName: t.name, start: attempt.start, end: attempt.end, type: 'headAlloc' });
       else headUnallocated.push({ taskId: t.id, task: t.name, minutes: headNeeded, reason: 'B1 için iş bitişiyle aynı veya sonrasında boş aralık yok' });
     }
@@ -2053,7 +2108,13 @@ function plan(){
     calisma_sistemi: isGroup ? "Grup (Supervisor Denetimli)" : "Herkes Bağımsız",
     toplam_is_sayisi: tasks.length,
     toplam_sure: totalInputHours.toFixed(2) + " saat",
-    girilen_isler: tasks.map((t, i) => ({
+    // Ekrandaki "📋 İşler" listesinin birebir karşılığı: her işe ayrılması gereken süre.
+    is_listesi: tasks.map(t => ({
+      is_no: t.name,
+      ayrilacak_sure_saat: parseFloat(t.hours) || 0,
+      tip: t.open ? "OPEN" : "Zorunlu"
+    })),
+    is_bazinda_plan: tasks.map((t, i) => ({
       is_no: t.name,
       girilen_sure: (parseFloat(t.hours) || 0).toFixed(2) + " saat",
       tip: t.open ? "OPEN" : "Zorunlu",
