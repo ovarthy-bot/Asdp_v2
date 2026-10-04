@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Uçak Bakım İş Planlama Sistemi – v21.9</title>
-<link rel="stylesheet" href="style.css"/>
+<link rel="stylesheet" href="style.css?v=20261004b"/>
 </head>
 <body class="mode-all">
 <a href="https://ovarthy-bot.github.io/navigasyon/" class="home-btn" title="Ana Sayfaya Git">🏠</a>
@@ -65,8 +65,10 @@
   <details class="collapsible" id="shiftDetails">
     <summary>🕒 Vardiya &amp; Yemek Molası <span class="small" id="shiftSummary" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
     <div class="body">
-      <div class="input-group"><label>Vardiya Başlangıç</label><input type="time" id="shiftStart"></div>
-      <div class="input-group"><label>Vardiya Bitiş</label><input type="time" id="shiftEnd"></div>
+      <div class="input-pair">
+        <div class="input-group"><label>Vardiya Başlangıç</label><input type="time" id="shiftStart"></div>
+        <div class="input-group"><label>Vardiya Bitiş</label><input type="time" id="shiftEnd"></div>
+      </div>
       <div class="input-group"><label>Yemek Molası</label>
         <input type="time" id="breakStart"><input type="time" id="breakEnd">
         <button class="btn" id="clearBreak" style="background:#111;color:var(--muted);border:1px solid var(--border)">Temizle</button>

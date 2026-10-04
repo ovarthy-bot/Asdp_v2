@@ -13,6 +13,7 @@
   --warning: #f59e0b;
   --danger: #ef4444;
   --glass-blur: blur(12px);
+  color-scheme: dark; /* tarayıcıya koyu tema: saat seçici ikonu ve açılır pencereler koyu zeminde görünür olur */
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -85,11 +86,14 @@ header h1 {
 /* --- INPUTS & BUTTONS --- */
 .input-group { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; align-items: center; flex-wrap: wrap; }
 .input-group label { min-width: 130px; font-size: 0.9rem; color: var(--text-muted); font-weight: 500; }
+.input-pair { display: flex; gap: 0.75rem; }
+.input-pair > .input-group { flex: 1; min-width: 0; }
 input[type="text"], input[type="number"], input[type="time"], select, textarea {
   background: rgba(0, 0, 0, 0.2); border: 1px solid var(--card-border); color: var(--text-main);
   padding: 0.75rem 1rem; border-radius: 0.75rem; font-family: inherit; font-size: 0.95rem;
   flex: 1; min-width: 0; transition: all 0.2s ease;
 }
+input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15); }
 textarea { width: 100%; min-height: 100px; resize: vertical; }
 
