@@ -99,8 +99,10 @@ input[type="text"], input[type="number"], input[type="time"], select, textarea {
   padding: 0.75rem 1rem; border-radius: 0.75rem; font-family: inherit; font-size: 0.95rem;
   flex: 1; min-width: 0; transition: all 0.2s ease;
 }
+/* Saat simgesi gizli; kutuya tıklanınca seçiciyi script.js açar.
+   display:none yerine opacity:0 — simge gizlenirse Chrome showPicker() ile seçiciyi açmıyor. */
 input[type="time"] { cursor: pointer; }
-input[type="time"]::-webkit-calendar-picker-indicator { display: none; } /* saat simgesi yok; kutuya tıklayınca seçici açılır (script.js) */
+input[type="time"]::-webkit-calendar-picker-indicator { opacity: 0; cursor: pointer; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15); }
 textarea { width: 100%; min-height: 100px; resize: vertical; }
 
