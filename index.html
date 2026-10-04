@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Uçak Bakım İş Planlama Sistemi – v21.9</title>
-<link rel="stylesheet" href="style.css?v=20261004b"/>
+<link rel="stylesheet" href="style.css?v=20261004c"/>
 </head>
 <body class="mode-all">
 <a href="https://ovarthy-bot.github.io/navigasyon/" class="home-btn" title="Ana Sayfaya Git">🏠</a>
@@ -69,12 +69,14 @@
         <div class="input-group"><label>Vardiya Başlangıç</label><input type="time" id="shiftStart"></div>
         <div class="input-group"><label>Vardiya Bitiş</label><input type="time" id="shiftEnd"></div>
       </div>
-      <div class="input-group"><label>Yemek Molası</label>
-        <input type="time" id="breakStart"><input type="time" id="breakEnd">
+      <div class="input-pair">
+        <div class="input-group"><label>Yemek Başlangıç</label><input type="time" id="breakStart"></div>
+        <div class="input-group"><label>Yemek Bitiş</label><input type="time" id="breakEnd"></div>
         <button class="btn" id="clearBreak" style="background:#111;color:var(--muted);border:1px solid var(--border)">Temizle</button>
       </div>
-      <div class="input-group"><label>Çay Molası</label>
-        <input type="time" id="teaBreakStart"><input type="time" id="teaBreakEnd">
+      <div class="input-pair">
+        <div class="input-group"><label>Çay Başlangıç</label><input type="time" id="teaBreakStart"></div>
+        <div class="input-group"><label>Çay Bitiş</label><input type="time" id="teaBreakEnd"></div>
         <button class="btn" id="clearTeaBreak" style="background:#111;color:var(--muted);border:1px solid var(--border)">Temizle</button>
       </div>
     </div>
@@ -129,6 +131,6 @@
   </div>
 </div>
 
-<script src="script.js?v=20260923d"></script>
+<script src="script.js?v=20261004a"></script>
 </body>
 </html>

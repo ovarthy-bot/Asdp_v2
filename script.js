@@ -592,6 +592,14 @@ if ($('teaBreakStart')) $('teaBreakStart').addEventListener('input', e=>{ teaBre
 if ($('teaBreakEnd')) $('teaBreakEnd').addEventListener('input', e=>{ teaBreakEnd = e.target.value; localStorage.setItem('asdp_teaBreakEnd', teaBreakEnd); updateShiftSummary(); });
 $('headTech').addEventListener('input', e=>{ headTech = e.target.value; localStorage.setItem('asdp_head', headTech); updateB1Summary(); });
 
+// Saat kutusuna tıklanınca saat seçiciyi hemen aç (sonradan eklenen saat alanları dahil).
+document.addEventListener('click', e => {
+  const el = e.target;
+  if (el instanceof HTMLInputElement && el.type === 'time' && typeof el.showPicker === 'function') {
+    try { el.showPicker(); } catch (_) {}
+  }
+});
+
 // ============================================================
 // Time helpers
 // ============================================================
