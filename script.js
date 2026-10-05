@@ -142,6 +142,7 @@ function renderTechBlocks(){
     techBlocksDiv.appendChild(wrap);
   });
   updateBusySummary();
+  updateTechsStat();
 }
 
 
@@ -315,7 +316,7 @@ function updateTechsStat(){
   
   const sReal = t2m($('shiftStart').value);
   const eReal = t2m($('shiftEnd').value);
-  if (sReal && eReal && eReal > sReal) {
+  if (sReal !== null && eReal !== null && eReal > sReal) {
     let breaks = [];
     const bsReal = t2m($('breakStart').value);
     const beReal = t2m($('breakEnd').value);
@@ -386,6 +387,7 @@ if ($('teaBreakEnd')) $('teaBreakEnd').value = teaBreakEnd;
 applyModeUI();
 applyAlgoUI();
 updateShiftSummary();
+updateTechsStat();
 updateB1Summary();
 updateBusySummary();
 
@@ -394,8 +396,8 @@ $('addTask').addEventListener('click', ()=>{ tasks.push({ name:`NRC ${tasks.leng
 $('addTech').addEventListener('click', ()=>{ technicians.push(`Teknisyen ${technicians.length+1}`); techBlocks.push([]); normalizeTechPreAssignments(); techRoles.push('regular'); renderTechs(); renderTechBlocks(); });
 $('resetTasks').addEventListener('click', ()=>{ if(confirm('Tüm işleri sıfırlamak?')){ tasks=[]; techPreAssignments=[]; renderTasks(); }});
 $('resetTechs').addEventListener('click', ()=>{ if(confirm('Tüm teknisyenleri sıfırlamak?')){ technicians=[]; techBlocks=[]; techRoles=[]; techPreAssignments=[]; renderTechs(); renderTechBlocks(); }});
-$('clearBreak').addEventListener('click', ()=>{ $('breakStart').value=''; $('breakEnd').value=''; breakStart=''; breakEnd=''; localStorage.removeItem('asdp_breakStart'); localStorage.removeItem('asdp_breakEnd'); updateShiftSummary(); });
-if ($('clearTeaBreak')) $('clearTeaBreak').addEventListener('click', ()=>{ $('teaBreakStart').value=''; $('teaBreakEnd').value=''; teaBreakStart=''; teaBreakEnd=''; localStorage.removeItem('asdp_teaBreakStart'); localStorage.removeItem('asdp_teaBreakEnd'); updateShiftSummary(); });
+$('clearBreak').addEventListener('click', ()=>{ $('breakStart').value=''; $('breakEnd').value=''; breakStart=''; breakEnd=''; localStorage.removeItem('asdp_breakStart'); localStorage.removeItem('asdp_breakEnd'); updateShiftSummary(); updateTechsStat(); });
+if ($('clearTeaBreak')) $('clearTeaBreak').addEventListener('click', ()=>{ $('teaBreakStart').value=''; $('teaBreakEnd').value=''; teaBreakStart=''; teaBreakEnd=''; localStorage.removeItem('asdp_teaBreakStart'); localStorage.removeItem('asdp_teaBreakEnd'); updateShiftSummary(); updateTechsStat(); });
 $('addHeadBlock').addEventListener('click', ()=>{ headBlocks.push({start:'', end:''}); renderHeadBlocks(); });
 
 $('addPreAssign').addEventListener('click', ()=>{
@@ -476,6 +478,7 @@ mainContainer.addEventListener('input', e => {
       if (f === 'techblock-start') techBlocks[techIndex][blockIndex].start = e.target.value;
       if (f === 'techblock-end') techBlocks[techIndex][blockIndex].end = e.target.value;
       save('asdp_techBlocks', techBlocks);
+      updateTechsStat();
   save('asdp_techPreAssigns', techPreAssignments);
     }
     return;
@@ -584,12 +587,12 @@ mainContainer.addEventListener('click', e => {
   }
 });
 
-$('shiftStart').addEventListener('input', e=>{ shiftStart = e.target.value; localStorage.setItem('asdp_shiftStart', shiftStart); updateShiftSummary(); });
-$('shiftEnd').addEventListener('input', e=>{ shiftEnd = e.target.value; localStorage.setItem('asdp_shiftEnd', shiftEnd); updateShiftSummary(); });
-$('breakStart').addEventListener('input', e=>{ breakStart = e.target.value; localStorage.setItem('asdp_breakStart', breakStart); updateShiftSummary(); });
-$('breakEnd').addEventListener('input', e=>{ breakEnd = e.target.value; localStorage.setItem('asdp_breakEnd', breakEnd); updateShiftSummary(); });
-if ($('teaBreakStart')) $('teaBreakStart').addEventListener('input', e=>{ teaBreakStart = e.target.value; localStorage.setItem('asdp_teaBreakStart', teaBreakStart); updateShiftSummary(); });
-if ($('teaBreakEnd')) $('teaBreakEnd').addEventListener('input', e=>{ teaBreakEnd = e.target.value; localStorage.setItem('asdp_teaBreakEnd', teaBreakEnd); updateShiftSummary(); });
+$('shiftStart').addEventListener('input', e=>{ shiftStart = e.target.value; localStorage.setItem('asdp_shiftStart', shiftStart); updateShiftSummary(); updateTechsStat(); });
+$('shiftEnd').addEventListener('input', e=>{ shiftEnd = e.target.value; localStorage.setItem('asdp_shiftEnd', shiftEnd); updateShiftSummary(); updateTechsStat(); });
+$('breakStart').addEventListener('input', e=>{ breakStart = e.target.value; localStorage.setItem('asdp_breakStart', breakStart); updateShiftSummary(); updateTechsStat(); });
+$('breakEnd').addEventListener('input', e=>{ breakEnd = e.target.value; localStorage.setItem('asdp_breakEnd', breakEnd); updateShiftSummary(); updateTechsStat(); });
+if ($('teaBreakStart')) $('teaBreakStart').addEventListener('input', e=>{ teaBreakStart = e.target.value; localStorage.setItem('asdp_teaBreakStart', teaBreakStart); updateShiftSummary(); updateTechsStat(); });
+if ($('teaBreakEnd')) $('teaBreakEnd').addEventListener('input', e=>{ teaBreakEnd = e.target.value; localStorage.setItem('asdp_teaBreakEnd', teaBreakEnd); updateShiftSummary(); updateTechsStat(); });
 $('headTech').addEventListener('input', e=>{ headTech = e.target.value; localStorage.setItem('asdp_head', headTech); updateB1Summary(); });
 
 // Saat kutusuna tıklanınca saat seçiciyi hemen aç (sonradan eklenen saat alanları dahil).
@@ -1931,7 +1934,7 @@ function plan(){
   // Teknisyen ismi + Toplam (saat) başlık olarak; içeride
   // İşler ve zaman aralıkları tek satırda 2 sütun.
   // ==========================================================
-  let techHtml = `<details class="collapsible" open><summary>👷 Teknisyenlerin Programı</summary><div class="body">
+  let techHtml = `<details class="collapsible" id="techProgram" open><summary>👷 Teknisyenlerin Programı</summary><div class="body">
     <div style="margin:10px 0 14px 0">
       <label class="small" style="display:block;margin-bottom:6px;color:var(--muted)">Opsiyonel Not</label>
       <textarea data-field="program-note" placeholder="Planla ilgili not ekle...">${escHtml(programNote)}</textarea>
@@ -2180,7 +2183,9 @@ function plan(){
 
   html += `<div class="footer-warning">⚠️ Bu planlama bir öneridir. Gerçek durumlarda işyeri prosedürlerine ve operasyonel ihtiyaçlara göre değişiklik yapılabilir.</div>`;
   resultsDiv.innerHTML = html;
-  window.scrollTo({ top: resultsDiv.offsetTop - 20, behavior: 'smooth' });
+  // Plan oluşunca doğrudan "Teknisyenlerin Programı" bölümüne git.
+  const scrollTarget = $('techProgram') || resultsDiv;
+  window.scrollTo({ top: scrollTarget.getBoundingClientRect().top + window.scrollY - 20, behavior: 'smooth' });
 }
 
 // WhatsApp metni parçaları: vardiya/yemek/çay tüm personel için aynıdır.
