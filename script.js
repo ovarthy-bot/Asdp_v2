@@ -1937,85 +1937,102 @@ function plan(){
       <textarea data-field="program-note" placeholder="Planla ilgili not ekle...">${escHtml(programNote)}</textarea>
     </div>`;
 
+  const roleLabel = r => r === 'supervisor' ? 'Supervisor' : r === 'qualified' ? 'Kalifiyeli' : 'Teknisyen';
+  const roleEmoji = r => r === 'supervisor' ? '👷🏼‍♂️' : r === 'qualified' ? '🧑‍🔬' : '👨‍🔧';
+  const nameWithRole = i => escHtml(perTech[i].name) + (isGroup ? ` <span title="${roleLabel(perTech[i].role)}">${roleEmoji(perTech[i].role)}</span>` : '');
+
+  // Kişi bazında toplam ve boşluklar: kartlar gruplandığı için kişinin günlük toplamı kartların altındaki tabloda gösterilir.
+  let summaryRows = '';
   perTech.forEach((p, idx)=>{
     p.segs.sort((a,b)=>a.start - b.start);
-    const roleTag = isGroup
-      ? `<span style="font-size:1.25rem; margin-left:6px; display:inline-flex; align-items:center;" title="${p.role === 'supervisor' ? 'Supervisor' : p.role === 'qualified' ? 'Kalifiyeli' : 'Teknisyen'}">${p.role === 'supervisor' ? '👷🏼‍♂️' : p.role === 'qualified' ? '🧑‍🔬' : '👨‍🔧'}</span>`
-      : '';
 
-    let body;
-    if (p.segs.length) {
-      body = '<div class="program-table">' + p.segs.map(s => {
-        let line = `<div class="program-seg">
-          <span class="program-task">${s.locked ? '<span title="Manuel atama">📌 </span>' : ''}${escHtml(s.task)}</span>
-          <span class="program-time">${m2t(s.start)} - ${m2t(s.end)}</span>
-        </div>`;
-        if (isGroup && p.role === 'regular') {
-          const attr = attributeSupervision(s._ws, s._we, techObjs, techRoles, technicians);
-          if (attr.covered.length > 0) {
-            const supList = attr.covered.map(c => `${escHtml(c.supName)} (${m2t(workToReal(c.start))}-${m2t(workToReal(c.end))})`).join(', ');
-            line += `<div class="small program-meta-line" style="color:var(--accent)">↳ Denetim: ${supList}</div>`;
-          }
-          if (!attr.fullyCovered) {
-            line += `<div class="small program-meta-line" style="color:var(--danger)">⚠ Denetimsiz: ${m2t(workToReal(attr.uncoveredFrom))}-${m2t(workToReal(s._we))}</div>`;
-          }
-        }
-        return line;
-      }).join('') + '</div>';
-    } else {
-      body = '<div class="program-empty">⚠ Atanmış iş yok</div>';
-    }
-
-    window._waCopyData = window._waCopyData || {};
-    window._waCopyData[idx] = { 
-      name: p.name, 
-      total: minutesToHoursStr(p.total), 
-      segs: p.segs.map(s => ({ task: s.task, s: m2t(s.start), e: m2t(s.end) }))
-    };
-
-    let missingAlert = '';
+    let gapCell = '—';
     const freeCap = techFreeCapacities[idx];
     if (freeCap !== undefined && freeCap > p.total) {
-      const missing = freeCap - p.total;
-      let gapsStr = '';
+      const gaps = [];
       const techObj = techObjs[idx];
       if (techObj) {
-        const freeIntervals = getFreeIntervals(techObj);
-        const gaps = [];
-        for (const [ws, we] of freeIntervals) {
-          if (we - ws >= 15) {
-             const startReal = workToReal(ws);
-             const endReal = workToReal(we);
-             gaps.push(`${m2t(startReal)} - ${m2t(endReal)}`);
-          }
-        }
-        if (gaps.length > 0) {
-           gapsStr = `<div style="margin-top:6px; font-family:monospace; font-size: 0.9em; opacity: 0.9;"><strong>Boşluklar:</strong> ${gaps.join(', ')}</div>`;
+        for (const [ws, we] of getFreeIntervals(techObj)) {
+          if (we - ws >= 15) gaps.push(`${m2t(workToReal(ws))} - ${m2t(workToReal(we))}`);
         }
       }
-      missingAlert = `<div class="small" style="color:var(--warning); margin-bottom:12px; display:flex; flex-direction:column; gap:4px; background: rgba(245, 158, 11, 0.1); padding: 0.75rem; border-radius: 0.5rem; border: 1px solid rgba(245, 158, 11, 0.2);">
-        <div style="display:flex; align-items:center; gap:6px;">
-          <svg style="width:16px;height:16px;fill:currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-          <span style="font-size:0.95rem"><strong>${minutesToHoursStr(missing)} saat</strong> eksik zaman (boşluk) mevcut</span>
-        </div>
-        ${gapsStr}
-      </div>`;
+      gapCell = `<span style="color:var(--warning)">⚠ ${minutesToHoursStr(freeCap - p.total)} sa${gaps.length ? `<br><span style="font-family:monospace;font-size:0.9em">${gaps.join(', ')}</span>` : ''}</span>`;
     }
+    const totalCell = p.segs.length ? `${minutesToHoursStr(p.total)} sa` : `<span style="color:var(--warning)">⚠ Atanmış iş yok</span>`;
+    summaryRows += `<tr><td><strong>${nameWithRole(idx)}</strong></td><td>${totalCell}</td><td>${gapCell}</td></tr>`;
+  });
+
+  // Aynı işi aynı saat aralığında yapan personeller tek kartta toplanır;
+  // kişinin tek başına yaptığı işler kendi kartında kalır.
+  const slots = new Map();
+  perTech.forEach((p, idx) => p.segs.forEach(s => {
+    const key = `${s.taskId}|${s.start}|${s.end}`;
+    if (!slots.has(key)) slots.set(key, { ...s, members: [] });
+    const slot = slots.get(key);
+    slot.members.push(idx);
+    slot.locked = slot.locked || s.locked;
+  }));
+  const cardMap = new Map();
+  slots.forEach(slot => {
+    const key = slot.members.join(',');
+    if (!cardMap.has(key)) cardMap.set(key, { members: slot.members, segs: [] });
+    cardMap.get(key).segs.push(slot);
+  });
+  const cards = [...cardMap.values()];
+  cards.forEach(c => c.segs.sort((a,b)=>a.start - b.start));
+  cards.sort((a,b) => a.segs[0].start - b.segs[0].start || b.members.length - a.members.length || a.members[0] - b.members[0]);
+
+  const waIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>';
+  if (cards.length) {
+    techHtml += `<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+      <button class="btn-wa-copy btn-wa-all" onclick="copyWAAll()">${waIcon} <span>Tümünü WhatsApp'a Kopyala</span></button>
+    </div>`;
+  }
+
+  window._waCopyData = [];
+  cards.forEach((c, idx)=>{
+    const total = c.segs.reduce((sum, s) => sum + (s._we - s._ws), 0);
+    const hasRegular = isGroup && c.members.some(i => perTech[i].role === 'regular');
+
+    const body = '<div class="program-table">' + c.segs.map(s => {
+      let line = `<div class="program-seg">
+        <span class="program-task">${s.locked ? '<span title="Manuel atama">📌 </span>' : ''}${escHtml(s.task)}</span>
+        <span class="program-time">${m2t(s.start)} - ${m2t(s.end)}</span>
+      </div>`;
+      if (hasRegular) {
+        const attr = attributeSupervision(s._ws, s._we, techObjs, techRoles, technicians);
+        if (attr.covered.length > 0) {
+          const supList = attr.covered.map(cv => `${escHtml(cv.supName)} (${m2t(workToReal(cv.start))}-${m2t(workToReal(cv.end))})`).join(', ');
+          line += `<div class="small program-meta-line" style="color:var(--accent)">↳ Denetim: ${supList}</div>`;
+        }
+        if (!attr.fullyCovered) {
+          line += `<div class="small program-meta-line" style="color:var(--danger)">⚠ Denetimsiz: ${m2t(workToReal(attr.uncoveredFrom))}-${m2t(workToReal(s._we))}</div>`;
+        }
+      }
+      return line;
+    }).join('') + '</div>';
+
+    window._waCopyData[idx] = {
+      names: c.members.map(i => perTech[i].name),
+      total: minutesToHoursStr(total),
+      segs: c.segs.map(s => ({ task: s.task, s: m2t(s.start), e: m2t(s.end) }))
+    };
 
     techHtml += `<div class="tech-program-block">
       <div class="tech-program-header">
         <div class="tech-program-header-left">
-          <span class="tech-program-name">${escHtml(p.name)}</span>${roleTag}
+          <span class="tech-program-name"><span>${c.members.length > 1 ? '👥' : '👤'} ${c.members.map(nameWithRole).join(' + ')}</span></span>
         </div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-          <span class="tech-program-total">Toplam: <strong>${minutesToHoursStr(p.total)} sa</strong></span>
-          <button class="btn-wa-copy" onclick="copyWA(${idx})"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg> <span>WhatsApp</span></button>
+          <span class="tech-program-total">Toplam: <strong>${minutesToHoursStr(total)} sa</strong></span>
+          <button class="btn-wa-copy" onclick="copyWA(${idx})">${waIcon} <span>WhatsApp</span></button>
         </div>
       </div>
-      ${missingAlert}
       ${body}
     </div>`;
   });
+  techHtml += `<div class="small" style="color:var(--muted);margin-top:4px">Kişi bazında toplam ve boşluklar</div>
+    <table class="table" style="margin-top:8px"><tr><th>Teknisyen</th><th>Toplam</th><th>Boşluk</th></tr>${summaryRows}</table>`;
   techHtml += `</div></details>`;
   html += techHtml;
 
@@ -2166,33 +2183,43 @@ function plan(){
   window.scrollTo({ top: resultsDiv.offsetTop - 20, behavior: 'smooth' });
 }
 
-window.copyWA = function(idx) {
-  const data = window._waCopyData[idx];
-  if (!data) return;
+// WhatsApp metni parçaları: vardiya/yemek/çay tüm personel için aynıdır.
+function waShiftLines() {
   const shiftS = $('shiftStart').value || '—';
   const shiftE = $('shiftEnd').value || '—';
-  let text = `👷 *${data.name}*\n⏳ Toplam: ${data.total} saat\n🗓️ Vardiya: ${shiftS} - ${shiftE}\n`;
-  
+  let text = `🗓️ Vardiya: ${shiftS} - ${shiftE}\n`;
   const bs = $('breakStart').value, be = $('breakEnd').value;
   if (bs && be) text += `🍲 Yemek: ${bs} - ${be}\n`;
   const ts = $('teaBreakStart') ? $('teaBreakStart').value : '', te = $('teaBreakEnd') ? $('teaBreakEnd').value : '';
   if (ts && te) text += `☕ Çay: ${ts} - ${te}\n`;
-  
-  text += `\n*GÖREVLER:*\n`;
-  if (data.segs.length > 0) {
-    data.segs.forEach(s => {
-      text += `🔹 ${s.s} - ${s.e} | ${s.task}\n`;
-    });
-  } else {
-    text += `⚠ Atanmış iş yok.\n`;
-  }
-  
+  return text;
+}
+const waGroupHeader = data => `${data.names.length > 1 ? '👥' : '👷'} *${data.names.join(', ')}*\n⏳ Toplam: ${data.total} saat\n`;
+const waTaskLines = data => data.segs.length
+  ? data.segs.map(s => `🔹 ${s.s} - ${s.e} | ${s.task}\n`).join('')
+  : `⚠ Atanmış iş yok.\n`;
+function waCopy(text, doneMsg) {
   navigator.clipboard.writeText(text).then(() => {
-    alert(data.name + ' planı kopyalandı!');
+    alert(doneMsg);
   }).catch(err => {
     console.error('Kopyalama hatası:', err);
     alert('Kopyalama başarısız oldu. Lütfen tekrar deneyin.');
   });
+}
+
+window.copyWA = function(idx) {
+  const data = window._waCopyData[idx];
+  if (!data) return;
+  const text = waGroupHeader(data) + waShiftLines() + `\n*GÖREVLER:*\n` + waTaskLines(data);
+  waCopy(text, data.names.join(', ') + ' planı kopyalandı!');
+};
+
+// Tüm grupların görevleri tek mesajda; vardiya/yemek/çay en üstte bir kez yazılır.
+window.copyWAAll = function() {
+  const all = window._waCopyData || [];
+  if (!all.length) return;
+  const text = waShiftLines() + `\n*GÖREVLER:*\n` + all.map(data => `\n` + waGroupHeader(data) + waTaskLines(data)).join('');
+  waCopy(text, 'Tüm plan kopyalandı!');
 };
 
 window.copyAIVerisi = function() {

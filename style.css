@@ -246,6 +246,9 @@ body.mode-group .all-only { display: none !important; }
   /* ROUND WHATSAPP BUTTON ON MOBILE */
   .btn-wa-copy { width: 36px; height: 36px; padding: 0; border-radius: 50%; min-width: 36px; }
   .btn-wa-copy span { display: none; }
+  /* "Tümünü kopyala" butonu mobilde de yazılı kalır */
+  .btn-wa-copy.btn-wa-all { width: auto; height: auto; padding: 0.5rem 1rem; border-radius: 999px; }
+  .btn-wa-copy.btn-wa-all span { display: inline; }
   
   .program-seg { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
   .program-time { align-self: flex-start; margin-left: 1.25rem; }
