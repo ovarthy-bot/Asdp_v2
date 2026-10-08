@@ -85,8 +85,8 @@ function applyAlgoUI(){
   if (algoNote) algoNote.textContent = (algoMode === 'b1_priority') ? 'Mevcut: B1 Öncelikli' : 'Mevcut: Teknisyen Öncelikli';
   const algoDesc = $('algoDescription');
   if (algoDesc) algoDesc.innerHTML = (algoMode === 'b1_priority')
-    ? 'Her iş, süresine göre tüm teknisyenlere küçük parçalar halinde paylaştırılır ve teknisyenlerin toplam yükü eşitlenir.'
-    : "Her iş <strong>aynı saatte birlikte çalışan 2'li veya 3'lü ekiplere</strong> verilir (3 saat ve üzeri işlerde önce 3'lü, diğerlerinde önce 2'li ekip denenir; kişi başı pay en az 30 dk). Teknisyen yalnızca Supervisor'lü bir ekipte (veya aynı işte Supervisor çalışırken) iş alır; Kalifiyeli denetim yapamaz. Ekip kurulamazsa iş tek kişiye verilir (son tercih). <strong>Bu yöntemde Supervisor Grup modu zorunludur.</strong>";
+    ? 'Her iş, süresine göre tüm teknisyenlere küçük parçalar halinde paylaştırılır ve teknisyenlerin toplam yükü eşitlenir. Tek iş kartı varsa iş tüm personele eşit paylaştırılır.'
+    : "Her iş <strong>aynı saatte birlikte çalışan 2'li veya 3'lü ekiplere</strong> verilir (3 saat ve üzeri işlerde önce 3'lü, diğerlerinde önce 2'li ekip denenir; kişi başı pay en az 30 dk). Teknisyen yalnızca Supervisor'lü bir ekipte (veya aynı işte Supervisor çalışırken) iş alır; Kalifiyeli denetim yapamaz. Ekip kurulamazsa iş tek kişiye verilir (son tercih). Tek iş kartı varsa ekip kuralı yerine iş tüm personele eşit paylaştırılır. <strong>Bu yöntemde Supervisor Grup modu zorunludur.</strong>";
 }
 
 function updateShiftSummary(){
@@ -1143,6 +1143,12 @@ function plan(){
   tasksCopy.forEach(t => taskSegments.set(t.id, []));
   const unallocated = [];
 
+  // Süresi olan tek bir iş kartı varsa iş tüm personele eşit paylaştırılır (scheduleSingleTaskEqually);
+  // eşitliği bozacak dengeleme, uzatma ve ekip adımları bu durumda atlanır.
+  const activeTasks = rawTasks.filter(t => t.rawMin > 0);
+  const singleTask = activeTasks.length === 1 ? activeTasks[0] : null;
+  let equalShare = null;
+
   tasksCopy.sort((a, b) => b.techWorkMin - a.techWorkMin);
 
   function pickCandidates(){
@@ -1406,9 +1412,132 @@ function plan(){
     }
   }
 
+  // ============================================================
+  // Tek iş kartı: iş tüm personele eşit paylaştırılır.
+  // ------------------------------------------------------------
+  // Pay 15dk'lık birimlerle dağıtılır; sıradaki 15dk her zaman o işte en az
+  // süresi olana gider (manuel atanmış süre kişinin payına sayılır). 15dk
+  // yuvarlaması eşitliği bozuyorsa eksik kalanlara +15dk verilir ve iş, mevcut
+  // eşitleme uzatması sınırında (en fazla %10, min 15dk) uzatılır. Herkes
+  // mümkün olduğunca aynı saatlerde birlikte çalışır. Grup modunda Teknisyen
+  // yalnızca aynı işte Supervisor'ün çalıştığı dilimleri alabilir; alamadığı
+  // pay diğer personele geçer (denetim kuralı eşitlikten önce gelir).
+  // ============================================================
+  function scheduleSingleTaskEqually(task){
+    const SLOT = 15;
+    const K = Math.floor(_workEnd_offset / SLOT);
+    const n = techObjs.length;
+    const ids = techObjs.map((_, i) => i);
+    const isSup = i => isGroup && techObjs[i].role === 'supervisor';
+    const isReg = i => isGroup && techObjs[i].role === 'regular';
+    const rank = i => isSup(i) ? 0 : isReg(i) ? 2 : 1;
+    const overlapsSlot = (s, k) => s.start < (k + 1) * SLOT && s.end > k * SLOT;
+
+    const pre = techObjs.map(t => t.segments.reduce((sum, s) => (s.locked && s.taskId === task.id) ? sum + (s.end - s.start) : sum, 0));
+    const free = techObjs.map(t => Array.from({ length: K }, (_, k) => isFreeRange(t, k * SLOT, (k + 1) * SLOT)));
+    const initialCaps = free.map(f => f.filter(Boolean).length * SLOT);
+    const work = task.isOpen
+      ? ceil15x(Math.max(0, Math.max(15, ceil15x(task.rawMin)) - (task.preAssignedMin || 0)))
+      : task.techWorkMin;
+    const maxPad = Math.max(15, ceil15x(task.techWorkMinOriginal * 0.10));
+
+    // Supervisor'ün manuel atamasıyla zaten denetlenen dilimler ve denetim bekleyen manuel Teknisyen dilimleri.
+    const supLockedAt = Array.from({ length: K }, (_, k) => ids.some(i => isSup(i) &&
+      techObjs[i].segments.some(s => s.locked && s.taskId === task.id && s.start <= k * SLOT && s.end >= (k + 1) * SLOT)));
+    const regLockedAt = Array.from({ length: K }, (_, k) => ids.some(i => isReg(i) &&
+      techObjs[i].segments.some(s => s.locked && s.taskId === task.id && overlapsSlot(s, k))));
+    const regFreeAt = Array.from({ length: K }, (_, k) => ids.filter(i => isReg(i) && free[i][k]).length);
+
+    // Herkes dilimleri aynı sırayla seçer ki ekip aynı saatlerde birlikte çalışsın: bu işe ait
+    // manuel atama varsa onun çevresi, yoksa vardiya başı önce gelir.
+    const anchors = [];
+    for (let k = 0; k < K; k++) if (techObjs.some(t => t.segments.some(s => s.locked && s.taskId === task.id && overlapsSlot(s, k)))) anchors.push(k);
+    const dist = k => anchors.length ? Math.min(...anchors.map(a => Math.abs(a - k))) : k;
+    const pos = new Array(K);
+    Array.from({ length: K }, (_, k) => k).sort((a, b) => dist(a) - dist(b) || a - b).forEach((k, p) => { pos[k] = p; });
+
+    function allocate(caps){
+      const add = ids.map(() => 0);
+      let rest = work;
+      while (rest >= SLOT) {
+        let best = -1;
+        for (const i of ids) {
+          if (add[i] + SLOT > caps[i]) continue;
+          const d = best < 0 ? -1 : (pre[i] + add[i]) - (pre[best] + add[best]);
+          if (d < 0 || (d === 0 && rank(i) < rank(best))) best = i;
+        }
+        if (best < 0) break;
+        add[best] += SLOT;
+        rest -= SLOT;
+      }
+      if (rest < SLOT) {
+        const level = Math.max(...ids.filter(i => add[i] > 0).map(i => pre[i] + add[i]));
+        const low = ids.filter(i => add[i] + SLOT <= caps[i] && pre[i] + add[i] + SLOT <= level);
+        if (low.length && low.length * SLOT <= maxPad) low.forEach(i => { add[i] += SLOT; });
+      }
+      return add;
+    }
+
+    // Supervisor'ler önce denetim bekleyen manuel Teknisyen dilimlerini, sonra en çok Teknisyenin boş
+    // olduğu dilimleri alır; Kalifiyeli Supervisor'lerin çalıştığı dilimleri tercih eder, Teknisyen
+    // yalnızca bu dilimlere yerleşir.
+    function place(add){
+      const take = ids.map(() => []);
+      const covered = supLockedAt.slice();
+      for (const i of ids.slice().sort((a, b) => rank(a) - rank(b) || a - b)) {
+        const need = add[i] / SLOT;
+        if (!need) continue;
+        const slots = [];
+        for (let k = 0; k < K; k++) if (free[i][k] && (!isReg(i) || covered[k])) slots.push(k);
+        const score = isSup(i) ? (k => (regLockedAt[k] && !covered[k] ? 1000 : 0) + regFreeAt[k])
+          : isGroup ? (k => covered[k] ? 1 : 0) : (() => 0);
+        slots.sort((a, b) => score(b) - score(a) || pos[a] - pos[b]);
+        take[i] = slots.slice(0, need).sort((a, b) => a - b);
+        if (isSup(i)) take[i].forEach(k => { covered[k] = true; });
+      }
+      return take;
+    }
+
+    // Supervisor dilimleri bir Teknisyenin payına yetmezse o Teknisyenin üst sınırı düşürülür ve pay yeniden dağıtılır.
+    const caps = initialCaps.slice();
+    const supervisionLimited = ids.map(() => false);
+    let take;
+    for (let guard = 0; guard < 500; guard++) {
+      const add = allocate(caps);
+      take = place(add);
+      const short = ids.filter(i => take[i].length * SLOT < add[i]);
+      if (!short.length) break;
+      short.forEach(i => { caps[i] = take[i].length * SLOT; supervisionLimited[i] = true; });
+    }
+
+    ids.forEach(i => {
+      const runs = [];
+      take[i].forEach(k => {
+        const last = runs[runs.length - 1];
+        if (last && last[1] === k) last[1] = k + 1; else runs.push([k, k + 1]);
+      });
+      runs.forEach(([a, b]) => {
+        const start = a * SLOT, end = b * SLOT;
+        techObjs[i].segments.push({ start, end, taskId: task.id, taskName: task.name });
+        techObjs[i].totalMin += end - start;
+        taskSegments.get(task.id).push({ techIndex: i, start, end });
+      });
+    });
+
+    const placed = take.reduce((s, tk) => s + tk.length * SLOT, 0);
+    const rest = work - placed;
+    if (rest >= SLOT && !task.isOpen) {
+      unallocated.push({ taskId: task.id, task: task.name, minutes: rest, reason: 'Teknisyen kapasitesi doldu; mümkün olan kısım teknisyenlere dağıtıldı' });
+    }
+    return { task, pre, initialCaps, supervisionLimited, padded: Math.max(0, -rest),
+      target: (work + pre.reduce((s, p) => s + p, 0)) / n,
+      planned: ids.map(i => pre[i] + take[i].length * SLOT) };
+  }
+
   // Manuel atanmış Teknisyen parçalarına, işin kalan süresinden, aynı işte ve aynı saatte
   // boş bir Supervisor yerleştirilir; aksi halde bu parçalar denetimsiz kalıp kesilirdi.
-  if (isGroup) {
+  // Tek iş kartında bu yerleşimi eşit paylaşım kendisi yapar.
+  if (isGroup && !singleTask) {
     techObjs.filter(x => x.role === 'regular').forEach(reg => {
       reg.segments.filter(s => s.locked).forEach(seg => {
         const task = tasksCopy.find(t => t.id === seg.taskId);
@@ -1436,7 +1565,9 @@ function plan(){
   const mandatoryTasks = tasksCopy.filter(t => !t.isOpen).sort((a, b) => b.techWorkMin - a.techWorkMin);
   const openTasks = tasksCopy.filter(t => t.isOpen).sort((a, b) => a.techWorkMin - b.techWorkMin || a.id - b.id);
 
-  if (algoMode === 'tech_priority') {
+  if (singleTask) {
+    equalShare = scheduleSingleTaskEqually(singleTask);
+  } else if (algoMode === 'tech_priority') {
     scheduleTeamsTimeFirst(mandatoryTasks);
     // OPEN işler de kalan boşluklara ekip halinde yerleşir.
     scheduleTeamsTimeFirst(openTasks);
@@ -1452,7 +1583,7 @@ function plan(){
   function getTotals(){ return techObjs.map((t,i)=>({ idx:i, total:t.totalMin })); }
   let totals = getTotals();
   
-  if (algoMode === 'b1_priority') {
+  if (algoMode === 'b1_priority' && !singleTask) {
     let iter = 0;
     while(iter < 200){
     iter++;
@@ -1531,7 +1662,7 @@ function plan(){
   const targetTotal = totals[0].total;
 
   // Teknisyen Öncelikli modda ekip üyelerinin eşit süresi bozulmasın diye tek kişilik uzatma yapılmaz.
-  for (let i = 1; i < totals.length && algoMode === 'b1_priority'; i++) {
+  for (let i = 1; i < totals.length && algoMode === 'b1_priority' && !singleTask; i++) {
     const tech = techObjs[totals[i].idx];
     let deficit = targetTotal - tech.totalMin;
     while (deficit >= 15) {
@@ -1545,7 +1676,7 @@ function plan(){
   mergeAndRecompute(techObjs);
 
   // Teknisyen Öncelikli modda işleri 15dk'lık parçalara bölmemek için boştaki teknisyene parça aktarılmaz.
-  if (algoMode === 'b1_priority') ensureNoIdleTech(techObjs, techRoles, isGroup);
+  if (algoMode === 'b1_priority' && !singleTask) ensureNoIdleTech(techObjs, techRoles, isGroup);
   if (isGroup) repairCoverage(techObjs, techRoles);
   mergeAndRecompute(techObjs);
 
@@ -1849,7 +1980,7 @@ function plan(){
       }
     });
 
-    let paddedAny = (algoMode === 'b1_priority');
+    let paddedAny = (algoMode === 'b1_priority' && !singleTask);
     let guardPad = 0;
     while(paddedAny && guardPad < 1000) {
       paddedAny = false;
@@ -2063,6 +2194,40 @@ function plan(){
         <span style="color:var(--danger)">➜ Tüm işler orantılı olarak <strong>~%${reductionPct}</strong> küçültüldü.</span>
       </span>${detailHtml}
     </div></details>`;
+  }
+
+  // Tek iş kartı: eşit paylaşım özeti ve eşitliği bozan (çakışan) koşullar.
+  let equalShareSummary = null;
+  if (equalShare) {
+    const es = equalShare;
+    const h = minutesToHoursStr;
+    const finalMin = techObjs.map(t => t.segments.reduce((s, sg) => sg.taskId === es.task.id ? s + (sg.end - sg.start) : s, 0));
+    const level = Math.max(0, ...es.planned.filter((p, i) => p > es.pre[i]));
+    const conflicts = [], infos = [], noShare = [], shortRound = [];
+    techObjs.forEach((t, i) => {
+      if (es.pre[i] > level) conflicts.push(`${t.name}: manuel ataması (${h(es.pre[i])} sa) eşit payı aşıyor; işin kalanı diğer personele paylaştırıldı.`);
+      else if (es.planned[i] < level) {
+        if (es.supervisionLimited[i]) conflicts.push(`${t.name}: aynı işte Supervisor'ün çalıştığı saatler yetmediği için ${h(es.planned[i])} sa verilebildi (denetim kuralı eşitlikten önce gelir).`);
+        else if (es.planned[i] - es.pre[i] >= es.initialCaps[i]) conflicts.push(`${t.name}: dolu saatleri nedeniyle boş zamanı (${h(es.initialCaps[i])} sa) eşit paya yetmedi.`);
+        else if (es.planned[i] === 0) noShare.push(t.name);
+        else shortRound.push(t.name);
+      }
+    });
+    if (noShare.length) conflicts.push(`İş süresi herkese en az 15 dk vermeye yetmiyor: ${noShare.join(', ')} bu işten pay almadı.`);
+    if (shortRound.length) conflicts.push(`15 dk'lık plan birimi nedeniyle tam eşitlik sağlanamadı: ${shortRound.join(', ')} diğerlerinden en fazla 15 dk az aldı (eşitleme için iş en fazla %10 uzatılabilir).`);
+    const changed = techObjs.map((_, i) => i).filter(i => finalMin[i] !== es.planned[i]);
+    const withdrawn = changed.length > 0 && finalMin.every(m => m === 0);
+    if (withdrawn) conflicts.push('B1 onayı planlanamadığı için iş personelden geri alındı (aşağıdaki uyarılara bakın).');
+    else changed.forEach(i => conflicts.push(`${techObjs[i].name}: denetim / B1 kontrolü sonrası payı ${h(es.planned[i])} → ${h(finalMin[i])} sa oldu.`));
+    if (es.padded && !withdrawn) infos.push(`Tam eşitlik için iş ${es.padded} dk uzatıldı (eşitleme uzatması: iş süresinin en fazla %10'u, en az 15 dk).`);
+    if (algoMode === 'tech_priority') infos.push("Teknisyen Öncelikli yöntemin 2'li/3'lü ekip ve parça kuralları tek iş kartında uygulanmaz; iş tüm personele paylaştırıldı.");
+
+    // Eşitlik sağlandıysa herkesin payı, sağlanamadıysa ulaşılamayan eşit pay hedefi gösterilir.
+    const shareLabel = conflicts.length ? `eşit pay hedefi: <strong>${h(es.target)} sa</strong>` : `kişi başı pay: <strong>${h(level)} sa</strong>`;
+    equalShareSummary = { is_no: es.task.name, [conflicts.length ? 'esit_pay_hedefi' : 'kisi_basi_pay']: h(conflicts.length ? es.target : level) + ' sa', notlar: conflicts.concat(infos) };
+    html += `<div class="${conflicts.length ? 'attention' : 'capacity-info'}"><strong>⚖️ Tek İş Kartı – Eşit Paylaşım${conflicts.length ? ': Çakışan Koşullar' : ''}</strong>
+      <div class="small" style="margin:6px 0"><strong>${escHtml(es.task.name)}</strong> işi ${techObjs.length} personele paylaştırıldı – ${shareLabel}</div>
+      ${conflicts.concat(infos).map(x => `<div class="small">• ${escHtml(x)}</div>`).join('')}</div>`;
   }
 
   // ==========================================================
@@ -2308,6 +2473,7 @@ function plan(){
       baslangic: m2t(workToReal(s.start)),
       bitis: m2t(workToReal(s.end))
     })) : [],
+    tek_is_esit_paylasim: equalShareSummary || undefined,
     atanmayan_isler: finalUnallocated.map(u => ({
       is_no: u.task,
       sure: (u.minutes / 60).toFixed(2) + " sa",
