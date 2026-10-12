@@ -80,6 +80,29 @@ Mevcut algoritma her pozitif süreli iş için en fazla 15 dakikalık B1 onay pa
 
 **Yeni davranış:** Hesaplama kuralı değiştirilmedi; arayüz metni onayın her işin bitişinde 15 dakika olarak planlandığını açıkça belirtir. Bu, kaynak kodda görülen mevcut varsayımdır; kurumun operasyonel kuralı farklıysa ayrıca kararlaştırılmalıdır.
 
+### 12. Kısmen atanan işin kalanının B1'in boş zamanına verilmemesi
+
+Teknisyen kapasitesi dolunca, hiç atanmamış işler B1'e bütün olarak (B1-only) veriliyordu; ancak teknisyenlere **kısmen** atanabilmiş bir işin kalanı B1'in boş zamanı olsa bile "atanamadı" olarak bırakılıyordu. Örnek: 7 personel (5,5 sa) + B1 (5,5 sa) = 44 sa kapasiteye karşılık 45 sa talepte NRC 1'in 1,75 saati atanamıyordu; oysa B1'in 0,75 saati boştaydı (en az 1,00 saat zaten sığmaz).
+
+**Yeni davranış:** Zorunlu işlerin kapasiteden dolayı kalan süresi, OPEN dolgudan önce şu sırayla yerleştirilmeye çalışılır: (1) teknisyenlerin boş aralıkları (Teknisyen için aynı işte Supervisor kapsamı şartıyla), (2) B1'in boş zamanı (**B1 iş desteği**). Önce işin B1 onayından önceki boşluklar, olmazsa sonrası kullanılır. Hiçbir süre eklenmez; yalnızca atanamayan süre taşınır. Ayrıca:
+- B1 listesinde iş desteği, onaydan ayrı bir "B1 iş desteği" etiketiyle görünür; bitişik olsalar da onayla birleştirilmez. `AI İçin Tüm Planı Kopyala` çıktısında bu satırlara `tur` alanı eklenir.
+- B1'e bütün olarak sığmayan B1-only iş artık tamamen düşmez; B1'in boş zamanına sığan kısmı yerleştirilir.
+- Zorunlu iş, OPEN dolgunun önüne geçer (B1 boşluğunu önce zorunlu işin kalanı kullanır).
+- Manuel atama içeren işlerde kalan süre eskiden eksik raporlanıyordu (manuel süre iki kez düşülüyordu); artık işin teknisyen hedefi (manuel atamalar dahil) esas alınır.
+- Denetim kuralı aynen geçerlidir: Teknisyene yalnızca aynı işte Supervisor'ün çalıştığı aralıklar verilir; B1 iş desteği Teknisyen denetimi sayılmaz.
+
+### 13. B1 onayının işin son çalışma saatinden önceye yerleşmesi
+
+Birçok iş vardiya sonunda aynı anda bitince B1'in son dilimleri yetmiyor, yalnızca bir iş son dilimi alıyor; diğer işlerin onayı ise bitişlerinden önceye düşüyordu (ör. NRC 4 için B1 onayı 19:00–19:15, ama bir Supervisor aynı işte 19:45'e kadar çalışıyor). Eski sürümde rastgele senaryoların yaklaşık %22'sinde en az bir iş bu durumdaydı.
+
+**Yeni davranış:**
+- B1 onayları, en geç biten iş önce olacak şekilde yerleştirilir.
+- Onayı işin bitişinden önceye düşen işin, onaydan sonraki 15 dk'lık parçaları, onaydan önceki bir boşlukla ya da başka bir işin parçasıyla yer değiştirir. Yer değiştirme toplam işçiliği ve kişi yüklerini değiştirmez, hiçbir Teknisyeni denetimsiz bırakmaz, sabit manuel atamaları ve dolu saatleri taşımaz ve başka bir işi kendi onayından sonraya itmez.
+- B1'in boş dilimi tüm işlere yetmiyorsa dilimler önce en çok işçilik taşıyan işlere verilir (onaysız kalan iş teknisyenlerden de geri alındığından, en az süre kaybedilsin diye).
+- Yer değiştirme ile çözülemeyen durumlar (B1'in uzun süre dolu olması, sabit manuel atama vb.) sonuç sayfasında "⚠ B1 Onayı İş Bitişinden Önce" uyarısıyla listelenir.
+
+**Bilinen sınır:** Rastgele senaryolarda ihlal oranı yaklaşık %22'den %4–6'ya (aşırı yüklü senaryolarda %8–12) indi; sıfırlanması garanti değildir. Yer değiştirme kişi başına ortalama parça sayısını yaklaşık 0,15–0,25 artırır.
+
 ## Korunan özellikler
 
 - Supervisor ALL ve Supervisor Grup çalışma modları.
@@ -105,6 +128,8 @@ Mevcut algoritma her pozitif süreli iş için en fazla 15 dakikalık B1 onay pa
 `test_asdp.py` test düzeneği uygulamayı Chromium içinde çalıştırıp 17 senaryoyu kontrol eder. Kapsam: ilk açılış, varsayılan plan, 15 dakika dışı süre doğrulaması, mola sınırlarının eşlenmesi, mola çakışması, kapasite açığının korunması, fazla manuel atama uyarısı, Supervisor Grup modu, ekipli algoritmanın işçilik üst sınırı, Supervisor denetim süresinin çift sayılmaması, vardiya dışı sabit atama, mola içinden başlayan dolu bloğun kapasite etkisi, iki OPEN senaryosu, tek işli OPEN senaryosu ve tarayıcı JavaScript hatası kontrolü.
 
 Son koşuda **17/17 kontrol başarılı**, `node --check script.js` başarılıdır. Bu testler senaryolarla doğrulama sağlar; tüm olası teknisyen/iş/mola kombinasyonlarının matematiksel kanıtı değildir.
+
+**B1 iş desteği değişikliği (madde 12):** `test_asdp.py`'ye 3 kontrol eklendi (toplam 20): kapasite israf edilmiyor (44 sa yerleşiyor, NRC 1'den yalnızca 1,00 sa atanamıyor), B1 iş desteği listede ayrı görünüyor ve B1 onayı işin son çalışma saatinden önce kalmıyor (madde 13). Bu kontrollerin eşdeğeri jsdom ile doğrulandı; Playwright/Chromium düzeneği bu değişiklik sırasında çalıştırılamadı, kullanıma almadan önce `test_asdp.py` yeniden koşturulmalıdır. Ek olarak eski ve yeni kod, rastgele üretilen senaryolarda (2–9 personel, 1–8 iş, her iki mod/algoritma, mola, dolu saat, manuel atama, OPEN iş) karşılaştırıldı (3000 senaryo): yeni kod çakışma veya denetimsiz Teknisyen çalışması üretmedi ve hiç çökmedi. Zorunlu işlerde yerleşen süre 2999 senaryoda eşit ya da daha fazlaydı; yalnızca bir aşırı yüklü senaryoda (B1'de 4 boş dilim) 15 dk daha az yerleşti. Bir senaryoda `tech_priority`'nin önceden var olan fazla atama sorunu (+15 dk), iş artık B1 kuralıyla düşmediği için görünür oldu.
 
 ## Kurulum
 

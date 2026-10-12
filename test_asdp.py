@@ -15,7 +15,7 @@ debug_probe = '''  window.__debugPlan = {
       preAssignedMin: t.preAssignedMin || 0 })),
     technicians: techObjs.map(t => ({ name: t.name, role: t.role,
       segments: t.segments.map(s => ({ taskId: s.taskId, start: s.start, end: s.end, locked: !!s.locked })) })),
-    b1Segments: headObj ? headObj.segments.map(s => ({ taskId: s.taskId, start: s.start, end: s.end })) : [],
+    b1Segments: headObj ? headObj.segments.map(s => ({ taskId: s.taskId, start: s.start, end: s.end, kind: s.kind || null })) : [],
     unallocated: [...unallocated, ...finalUnallocated, ...headUnallocated].map(u => ({ task: u.task, taskId: u.taskId, minutes: u.minutes, reason: u.reason }))
   };
   resultsDiv.innerHTML = html;
@@ -25,8 +25,8 @@ if needle not in js:
     raise SystemExit('Cannot find final plan render marker for test instrumentation')
 js = js.replace(needle, debug_probe + '  // Plan oluşunca', 1)
 css = css.replace(css.split('\n')[0], '')  # Skip external font loading in tests.
-html = html.replace('<link rel="stylesheet" href="style.css?v=20261013a"/>', '<style>' + css + '</style>')
-html = html.replace('<script src="script.js?v=20261013a"></script>', '<script>' + js + '</script>')
+html = html.replace('<link rel="stylesheet" href="style.css?v=20261013b"/>', '<style>' + css + '</style>')
+html = html.replace('<script src="script.js?v=20261013b"></script>', '<script>' + js + '</script>')
 mock = """<script>(()=>{const d=new Map();Object.defineProperty(window,'localStorage',{configurable:true,value:{getItem:k=>d.has(k)?d.get(k):null,setItem:(k,v)=>d.set(k,String(v)),removeItem:k=>d.delete(k),clear:()=>d.clear()}})})();</script>"""
 html = html.replace('</head>', mock + '</head>')
 
@@ -203,6 +203,51 @@ with sync_playwright() as p:
     single_text = single_open_page.locator('#results').inner_text()
     check('Tek işli OPEN yolunda sabit atama ve işçilik üst sınırı korunuyor', single_totals.get(1, 0) == 50 and single_totals.get(1, 0) <= single_task['rawMin'], f"Atanan: {single_totals.get(1, 0)} dk; tahmin: {single_task['rawMin']} dk")
     check('Tek işli OPEN yolunda 10 dakikalık kalan görünür', 'Kalan OPEN süre 15 dakikalık planlama birimine sığmadı' in single_text, single_text[-250:].replace('\n',' | '))
+
+    # Regresyon: kısmen atanan işin kalanı B1'in boş zamanına verilmeli (kapasite israf edilmemeli).
+    # 7 personel x 5,5 sa + B1 5,5 sa = 44 sa kapasite, 45 sa talep: en az 1 sa atanamaz, fazlası değil.
+    import json
+    seed_values = {
+        'asdp_tasks': [{'name': f'NRC {i + 1}', 'hours': h} for i, h in enumerate([5, 2, 12, 24, 1, 1])],
+        'asdp_techs': ['ilhan', 'emin', 'metin', 'davut', 'onur', 'gizem', 'serdar'],
+        'asdp_techRoles': ['supervisor', 'supervisor', 'supervisor', 'regular', 'supervisor', 'regular', 'qualified'],
+        'asdp_shiftStart': '12:45', 'asdp_shiftEnd': '19:45',
+        'asdp_breakStart': '15:00', 'asdp_breakEnd': '16:00',
+        'asdp_teaBreakStart': '17:30', 'asdp_teaBreakEnd': '18:00',
+        'asdp_planMode': 'group', 'asdp_algoMode': 'b1_priority',
+    }
+    seed_js = ''.join(f"localStorage.setItem({json.dumps(k)}, {json.dumps(v if isinstance(v, str) else json.dumps(v))});" for k, v in seed_values.items())
+    b1_page = browser.new_page()
+    b1_page.on('pageerror', lambda e: errors.append(str(e)))
+    b1_page.set_content(html.replace('</head>', f'<script>{seed_js}</script></head>'), wait_until='domcontentloaded', timeout=10000)
+    b1_page.locator('#planBtn').click(timeout=5000)
+    b1_debug = b1_page.evaluate('window.__debugPlan')
+    b1_totals = task_minutes(b1_debug)
+    b1_left = sum(u['minutes'] for u in b1_debug['unallocated'] if u['task'] == 'NRC 1' and u['reason'].startswith('Teknisyen ve B1'))
+    check('Kısmen atanan işin kalanı B1 boş zamanına yerleşiyor', sum(b1_totals.values()) == 44 * 60 and b1_left == 60,
+          f"Yerleşen: {sum(b1_totals.values())} dk (beklenen 2640); NRC 1 atanamayan: {b1_left} dk (beklenen 60)")
+    b1_text = b1_page.locator('#results').inner_text()
+    check('B1 iş desteği listede ayrı gösteriliyor', 'B1 iş desteği' in b1_text, b1_text[-200:].replace('\n', ' | '))
+
+    # Regresyon: B1 onayı, işin son çalışma saatinden önce kalmamalı (iş vardiya sonunda birikse bile).
+    seed_values.update({
+        'asdp_shiftStart': '11:45',
+        'asdp_techBlocks': [[{'start': '12:45', 'end': '13:45'}], [], [], [], [], [], []],
+    })
+    seed_js = ''.join(f"localStorage.setItem({json.dumps(k)}, {json.dumps(v if isinstance(v, str) else json.dumps(v))});" for k, v in seed_values.items())
+    appr_page = browser.new_page()
+    appr_page.on('pageerror', lambda e: errors.append(str(e)))
+    appr_page.set_content(html.replace('</head>', f'<script>{seed_js}</script></head>'), wait_until='domcontentloaded', timeout=10000)
+    appr_page.locator('#planBtn').click(timeout=5000)
+    appr_debug = appr_page.evaluate('window.__debugPlan')
+    job_end = {}
+    for tech in appr_debug['technicians']:
+        for seg in tech['segments']:
+            if seg['taskId'] >= 0:
+                job_end[seg['taskId']] = max(job_end.get(seg['taskId'], 0), seg['end'])
+    early = [f"{appr_debug['tasks'][s['taskId']]['name']}: onay bitişi {s['end']}, işin bitişi {job_end[s['taskId']]}"
+             for s in appr_debug['b1Segments'] if s['taskId'] >= 0 and not s.get('kind') and s['taskId'] in job_end and job_end[s['taskId']] > s['end']]
+    check('B1 onayı işin son çalışma saatinden önce kalmıyor', not early, '; '.join(early))
 
     check('Tarayıcı JavaScript hatası yok', len(errors) == 0, '; '.join(errors[:5]))
     browser.close()

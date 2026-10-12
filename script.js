@@ -1154,6 +1154,9 @@ function plan(){
     const diff = rounded - task.techWorkMinBeforeRound;
     if (diff !== 0) roundingAdjustments.push({ name: task.name, before: task.techWorkMinBeforeRound, after: rounded, diff });
   });
+  // İşin teknisyenlere verilecek toplam hedefi (manuel atamalar dahil); kalan süre hesabı buna göre yapılır.
+  // Manuel atama işin bütçesini aşıyorsa hedef, girilen tahmini aşamaz.
+  rawTasks.forEach(task => { task.techTargetMin = Math.min(task.techWorkMin + (task.preAssignedMin || 0), ceil15x(task.requestedTechWorkMin)); });
   const mandatoryAfterRound = rawTasks.filter(t => !t.isOpen).reduce((sum, t) => sum + t.techWorkMin, 0);
   capacityExceeded = mandatoryAfterRound > totalCapacityMin;
 
@@ -1740,7 +1743,105 @@ function plan(){
     }, 0), 0);
   }
 
+  // B1 parçaları: kind boşsa onay, 'support' = kısmen atanmış işe B1 iş desteği, 'b1only' = B1'e verilen iş.
+  // Farklı türdeki bitişik parçalar birleştirilmez; böylece onay ile iş desteği listede ayrı görünür.
+  function mergeSingleSchedule(obj){
+    if (!obj) return;
+    obj.segments.sort((a,b)=>a.start - b.start || a.end - b.end);
+    const merged = [];
+    for (const s of obj.segments) {
+      const last = merged[merged.length - 1];
+      if (last && last.taskId === s.taskId && last.end === s.start && !!last.locked === !!s.locked && (last.kind || '') === (s.kind || '')) {
+        last.end = s.end;
+      } else {
+        merged.push({...s});
+      }
+    }
+    obj.segments = merged;
+    obj.totalMin = obj.segments.reduce((sum, seg) => seg.taskId === -1 ? sum : sum + (seg.end - seg.start), 0);
+  }
+
   let headObj = null;
+  const headSupportAssignments = [];
+
+  // ------------------------------------------------------------
+  // Kalan işi kurtarma: kapasite yüzünden atanamayan süre, hiç süre eklenmeden
+  //  1) teknisyenlerin boşalan/kalan aralıklarına (Teknisyen için aynı işte Supervisor kapsamıyla),
+  //  2) B1'in boş zamanına (iş desteği) yerleştirilmeye çalışılır.
+  // Önce işin B1 onayından önceki boşluklar denenir; olmazsa onaydan sonrası kullanılır.
+  // Küçük kalanlar önce gelir ki mümkün olduğunca çok iş tamamlansın.
+  // ------------------------------------------------------------
+  function rescueLeftoverWork(){
+    if (!headObj) return;
+    const dropFromScheduler = (taskId, minutes) => {
+      for (let i = 0; i < unallocated.length && minutes > 0; i++) {
+        const entry = unallocated[i];
+        if (entry.taskId !== taskId) continue;
+        const cut = Math.min(entry.minutes, minutes);
+        entry.minutes -= cut;
+        minutes -= cut;
+      }
+      for (let i = unallocated.length - 1; i >= 0; i--) if (unallocated[i].minutes <= 0) unallocated.splice(i, 1);
+    };
+
+    finalUnallocated.filter(u => u.rescuable && u.minutes >= 15).sort((a, b) => a.minutes - b.minutes).forEach(u => {
+      const task = tasksCopy.find(t => t.id === u.taskId);
+      if (!task || task.isOpen) return;
+      const approvalStarts = headObj.segments.filter(s => s.taskId === task.id && !s.kind).map(s => s.start);
+      const softEnd = approvalStarts.length ? Math.min(...approvalStarts) : _workEnd_offset;
+      const limits = softEnd < _workEnd_offset ? [softEnd, _workEnd_offset] : [_workEnd_offset];
+      // İşin toplamı (teknisyenler + B1) girilen tahmini aşamaz: yalnızca gerçek eksik kadar süre taşınır.
+      const placedNow = assignedTaskMinutesOnTechnicians(task.id)
+        + headObj.segments.reduce((sum, seg) => seg.taskId === task.id ? sum + (seg.end - seg.start) : sum, 0);
+      const budget = Math.max(15, ceil15x(task.techTargetMin + task.headAlloc));
+      const shortfall = Math.min(u.minutes, budget - placedNow);
+      if (shortfall < 15) return;
+      let rest = shortfall;
+      let onTechs = 0, onB1 = 0;
+
+      if (!u.b1OnlyFull) {
+        const order = techObjs.slice().sort((a, b) =>
+          (isGroup && techRoles[a.index] === 'regular') - (isGroup && techRoles[b.index] === 'regular') || a.totalMin - b.totalMin || a.index - b.index);
+        for (const limitEnd of limits) {
+          for (const tech of order) {
+            const needsCover = isGroup && techRoles[tech.index] === 'regular';
+            while (rest >= 15) {
+              const slot = findSlotBefore(tech, rest, limitEnd, needsCover ? buildSupervisorCoverage(techObjs, techRoles, task.id) : null);
+              if (!slot) break;
+              tech.segments.push({ start: slot.start, end: slot.end, taskId: task.id, taskName: task.name });
+              tech.totalMin += slot.end - slot.start;
+              rest -= slot.end - slot.start;
+              onTechs += slot.end - slot.start;
+            }
+          }
+        }
+      }
+
+      for (const limitEnd of limits) {
+        while (rest >= 15) {
+          const slot = findSlotBefore(headObj, rest, limitEnd, null);
+          if (!slot) break;
+          const kind = u.b1OnlyFull ? 'b1only' : 'support';
+          headObj.segments.push({ start: slot.start, end: slot.end, taskId: task.id, taskName: task.name, kind });
+          headObj.totalMin += slot.end - slot.start;
+          (u.b1OnlyFull ? headOverflowAssignments : headSupportAssignments)
+            .push({ taskId: task.id, taskName: task.name, start: slot.start, end: slot.end, type: u.b1OnlyFull ? 'b1Only' : 'b1Support' });
+          rest -= slot.end - slot.start;
+          onB1 += slot.end - slot.start;
+        }
+      }
+
+      if (onTechs + onB1 > 0) {
+        mergeAndRecompute(techObjs);
+        mergeSingleSchedule(headObj);
+        dropFromScheduler(task.id, onTechs + onB1);
+        u.minutes = rest; // gerçek eksik: yerleşenden sonra kalan
+        if (rest > 0) u.reason = 'Teknisyen ve B1 kapasitesi doldu; işin mümkün olan kısmı yerleştirildi, kalan kısım atanamadı';
+      }
+    });
+    for (let i = finalUnallocated.length - 1; i >= 0; i--) if (finalUnallocated[i].rescuable && finalUnallocated[i].minutes <= 0) finalUnallocated.splice(i, 1);
+  }
+
   if (true) {
     headObj = { name: headTech, segments: [], totalMin: 0 };
 
@@ -1763,7 +1864,7 @@ function plan(){
         .filter(task => {
           const assigned = assignedTaskMinutesOnTechnicians(task.id);
           if (assigned > 0) {
-            partlyAssignedItems.push({ task, assigned, missing: Math.max(0, task.techWorkMin - assigned) });
+            partlyAssignedItems.push({ task, assigned, missing: Math.max(0, task.techTargetMin - assigned) });
             return false;
           }
           return true;
@@ -1777,10 +1878,13 @@ function plan(){
 
       for (const item of partlyAssignedItems) {
         if (item.missing >= 15) {
+          // Kalan süre B1'in boş zamanına (veya boşalan teknisyen aralıklarına) rescueLeftoverWork ile yerleştirilmeye çalışılır.
           finalUnallocated.push({
+            taskId: item.task.id,
             task: item.task.name,
             minutes: item.missing,
-            reason: 'İşin mümkün olan kısmı teknisyenlere dağıtıldı; kalan kısım B1-only yapılmadı'
+            rescuable: true,
+            reason: 'Teknisyen ve B1 kapasitesi doldu; işin mümkün olan kısmı yerleştirildi, kalan kısım atanamadı'
           });
         }
       }
@@ -1793,7 +1897,8 @@ function plan(){
         if (attempt) {
           headOverflowAssignments.push({ taskId: task.id, taskName: task.name, start: attempt.start, end: attempt.end, type: 'b1Only' });
         } else {
-          finalUnallocated.push({ task: task.name, minutes: fullB1Duration, reason: 'B1 kapasitesi dolu olduğu için iş kimseye atanmadı' });
+          finalUnallocated.push({ taskId: task.id, task: task.name, minutes: fullB1Duration, rescuable: true, b1OnlyFull: true,
+            reason: 'B1 kapasitesi dolu olduğu için iş kimseye atanmadı' });
         }
       }
     }
@@ -1801,37 +1906,162 @@ function plan(){
     mergeAndRecompute(techObjs);
     recomputeTaskTimeline();
 
-    const tasksForHead = tasksCopy.filter(t => !t.isOpen).slice().sort((a,b)=>{
-      const A = taskFinalEnd.get(a.id), B = taskFinalEnd.get(b.id);
-      if(A===null && B===null) return 0;
-      if(A===null) return 1;
-      if(B===null) return -1;
-      return A - B;
-    });
-
-    for(const t of tasksForHead){
-      if (b1OnlyTaskIds.has(t.id) || t.isOpen) continue;
-      const headNeeded = t.headAlloc;
-      if(headNeeded <= 0) continue;
-      const taskEnd = taskFinalEnd.get(t.id);
-      if (taskEnd === null) {
-        const attempt = tryScheduleOnTechNotBefore(headObj, headNeeded, t.id, t.name, 0);
-        if (attempt) headAssignments.push({ taskId: t.id, taskName: t.name, start: attempt.start, end: attempt.end, type: 'headAlloc' });
-        else headUnallocated.push({ taskId: t.id, task: t.name, minutes: headNeeded, reason: 'B1 kapasitesi dolu' });
-        continue;
-      }
-      const exactStart = Math.max(0, taskEnd - headNeeded);
-      let attempt = scheduleExactWindow(headObj, exactStart, taskEnd, t.id, t.name);
-      if (!attempt) attempt = tryScheduleOnTechNotBefore(headObj, headNeeded, t.id, t.name, taskEnd);
-      if (!attempt) {
-        // Bitişten sonra yer yoksa, bitişe en yakın (en geç) boş B1 dilimi kullanılır.
-        for (let s = floor15(taskEnd - headNeeded); s >= 0 && !attempt; s -= 15) {
-          attempt = scheduleExactWindow(headObj, s, s + headNeeded, t.id, t.name);
-        }
-      }
-      if (attempt) headAssignments.push({ taskId: t.id, taskName: t.name, start: attempt.start, end: attempt.end, type: 'headAlloc' });
-      else headUnallocated.push({ taskId: t.id, task: t.name, minutes: headNeeded, reason: 'B1 için iş bitişiyle aynı veya sonrasında boş aralık yok' });
+    // ------------------------------------------------------------
+    // B1 onay planı: onay, işin bitişinde (veya sonrasında) olmalıdır. Birçok iş aynı anda
+    // biterse vardiya sonundaki B1 dilimleri yetmez ve onay işin bitişinden önceye düşer.
+    // Bu durumda işin onaydan sonraki 15 dk'lık parçaları, onaydan önceki boş bir aralıkla veya
+    // başka bir işin parçasıyla yer değiştirir; toplam işçilik, kişi yükü ve Supervisor denetimi
+    // bozulmaz. Taşınamayan iş kalırsa uyarı olarak gösterilir.
+    // ------------------------------------------------------------
+    const approvalCandidates = tasksCopy.filter(t => !t.isOpen && !b1OnlyTaskIds.has(t.id) && t.headAlloc > 0);
+    // B1'in boş dilimi tüm işlere yetmiyorsa, onaysız kalan iş teknisyenlerden de geri alınır; bu yüzden
+    // dilimler önce en çok işçilik taşıyan işlere ayrılır (en az süre kaybı).
+    const approvalJobs = [];
+    {
+      const sim = { segments: headObj.segments.map(sg => ({ ...sg })), totalMin: headObj.totalMin };
+      approvalCandidates.slice()
+        .sort((a, b) => assignedTaskMinutesOnTechnicians(b.id) - assignedTaskMinutesOnTechnicians(a.id) || a.id - b.id)
+        .forEach(t => {
+          if (placeOnTech(sim, t.headAlloc, t.id, t.name, { notBefore: 0 })) approvalJobs.push(t);
+          else headUnallocated.push({ taskId: t.id, task: t.name, minutes: t.headAlloc, reason: 'B1 kapasitesi dolu' });
+        });
     }
+
+    // target: B1 programı (kalıcı) ya da onun kopyası (deneme). İşler en geç bitenden başlayarak yerleşir.
+    function planApprovals(target){
+      const ordered = approvalJobs.slice().sort((a, b) => {
+        const A = taskFinalEnd.get(a.id), B = taskFinalEnd.get(b.id);
+        if (A === null && B === null) return a.id - b.id;
+        if (A === null) return 1;
+        if (B === null) return -1;
+        return B - A || a.id - b.id;
+      });
+      return ordered.map(t => {
+        const headNeeded = t.headAlloc;
+        const taskEnd = taskFinalEnd.get(t.id);
+        let attempt;
+        if (taskEnd === null) {
+          attempt = placeOnTech(target, headNeeded, t.id, t.name, { notBefore: 0 });
+        } else {
+          attempt = scheduleExactWindow(target, Math.max(0, taskEnd - headNeeded), taskEnd, t.id, t.name);
+          if (!attempt) attempt = placeOnTech(target, headNeeded, t.id, t.name, { notBefore: taskEnd });
+          if (!attempt) {
+            // Bitişten sonra yer yoksa, bitişe en yakın (en geç) boş B1 dilimi kullanılır.
+            for (let st = floor15(taskEnd - headNeeded); st >= 0 && !attempt; st -= 15) {
+              attempt = scheduleExactWindow(target, st, st + headNeeded, t.id, t.name);
+            }
+          }
+        }
+        return { task: t, taskEnd, attempt };
+      });
+    }
+    const approvalIsEarly = p => !!p.attempt && p.taskEnd !== null && p.attempt.end < p.taskEnd;
+
+    // Aynı işte Supervisor olmadan çalışan Teknisyen dakikalarının toplamı (yer değiştirme denetimi için).
+    function uncoveredTotal(){
+      if (!isGroup) return 0;
+      const covCache = new Map();
+      const covFor = id => { if (!covCache.has(id)) covCache.set(id, buildSupervisorCoverage(techObjs, techRoles, id)); return covCache.get(id); };
+      let total = 0;
+      techObjs.forEach((tech, i) => {
+        if (techRoles[i] !== 'regular') return;
+        tech.segments.forEach(seg => {
+          if (seg.taskId === -1 || seg.taskId == null) return;
+          findGaps(seg.start, seg.end, covFor(seg.taskId)).forEach(([a, b]) => { total += b - a; });
+        });
+      });
+      return total;
+    }
+    function carveSegments(tech, from, to){
+      const kept = [];
+      tech.segments.forEach(seg => {
+        if (seg.end <= from || seg.start >= to) { kept.push(seg); return; }
+        if (seg.start < from) kept.push({ ...seg, end: from });
+        if (seg.end > to) kept.push({ ...seg, start: to });
+      });
+      tech.segments = kept;
+    }
+
+    // task işinin deadline'dan sonraki 15 dk'lık parçalarını deadline'dan önceye taşır.
+    // deadlines: diğer işlerin onay bitişleri; bir parça ancak kendi onayından önce kalacak yere gidebilir.
+    function repairTail(task, deadline, deadlines){
+      let moved = false;
+      function tryMoveUnit(fromTech, a){
+        const base = uncoveredTotal();
+        const others = techObjs.filter(y => y !== fromTech).sort((p, q) => p.totalMin - q.totalMin || p.index - q.index);
+        const order = [fromTech].concat(others);
+        for (let p = deadline - 15; p >= 0; p -= 15) {
+          for (const wantFree of [true, false]) {
+            for (const toTech of order) {
+              if (toTech === fromTech && p + 15 > a) continue;
+              const hit = toTech.segments.filter(sg => sg.start < p + 15 && sg.end > p);
+              let swapSeg = null;
+              if (hit.length === 0) {
+                if (!wantFree) continue;
+              } else {
+                if (wantFree || hit.length !== 1) continue;
+                const sg = hit[0];
+                if (sg.locked || sg.taskId === -1 || sg.taskId == null || sg.taskId === task.id) continue;
+                if (sg.start > p || sg.end < p + 15) continue;
+                if (a + 15 > (deadlines.has(sg.taskId) ? deadlines.get(sg.taskId) : Infinity)) continue;
+                swapSeg = sg;
+              }
+              const backupFrom = fromTech.segments, backupTo = toTech.segments;
+              const swapId = swapSeg ? swapSeg.taskId : null, swapName = swapSeg ? swapSeg.taskName : null;
+              carveSegments(fromTech, a, a + 15);
+              if (swapSeg) {
+                carveSegments(toTech, p, p + 15);
+                fromTech.segments.push({ start: a, end: a + 15, taskId: swapId, taskName: swapName });
+              } else if (toTech !== fromTech) {
+                toTech.segments = toTech.segments.slice(); // yedek dizi değiştirilmesin; geri almada özgün dizi dönülür
+              }
+              toTech.segments.push({ start: p, end: p + 15, taskId: task.id, taskName: task.name });
+              if (uncoveredTotal() <= base) return true;
+              fromTech.segments = backupFrom;
+              toTech.segments = backupTo;
+            }
+          }
+        }
+        return false;
+      }
+
+      for (let guard = 0; guard < 400; guard++) {
+        const units = [];
+        techObjs.forEach(tech => tech.segments.forEach(seg => {
+          if (seg.taskId === task.id && !seg.locked && seg.end > deadline && seg.end - seg.start >= 15) units.push({ tech, a: seg.end - 15 });
+        }));
+        units.sort((u, v) => v.a - u.a);
+        let progressed = false;
+        for (const u of units) {
+          if (tryMoveUnit(u.tech, u.a)) { progressed = true; moved = true; break; }
+        }
+        mergeAndRecompute(techObjs);
+        if (!progressed) break;
+      }
+      return moved;
+    }
+
+    for (let round = 0; round < 12; round++) {
+      recomputeTaskTimeline();
+      const dry = planApprovals({ segments: headObj.segments.map(sg => ({ ...sg })), totalMin: headObj.totalMin });
+      const early = dry.filter(approvalIsEarly);
+      if (!early.length) break;
+      const deadlines = new Map(dry.filter(p => p.attempt).map(p => [p.task.id, p.attempt.end]));
+      let movedAny = false;
+      for (const p of early) if (repairTail(p.task, p.attempt.end, deadlines)) movedAny = true;
+      if (!movedAny) break;
+    }
+    recomputeTaskTimeline();
+    planApprovals(headObj).forEach(p => {
+      const t = p.task;
+      if (p.attempt) {
+        headAssignments.push({ taskId: t.id, taskName: t.name, start: p.attempt.start, end: p.attempt.end, type: 'headAlloc' });
+      } else if (p.taskEnd === null) {
+        headUnallocated.push({ taskId: t.id, task: t.name, minutes: t.headAlloc, reason: 'B1 kapasitesi dolu' });
+      } else {
+        headUnallocated.push({ taskId: t.id, task: t.name, minutes: t.headAlloc, reason: 'B1 için iş bitişiyle aynı veya sonrasında boş aralık yok' });
+      }
+    });
 
     if (headUnallocated.length > 0) {
       const fallbackItems = headUnallocated.splice(0)
@@ -1858,22 +2088,6 @@ function plan(){
           finalUnallocated.push({ task: task.name, minutes: fallbackDuration, reason: 'B1’e atanamadığı için diğer teknisyenlerden de kaldırıldı' });
         }
       }
-    }
-
-    function mergeSingleSchedule(obj){
-      if (!obj) return;
-      obj.segments.sort((a,b)=>a.start - b.start || a.end - b.end);
-      const merged = [];
-      for (const s of obj.segments) {
-        const last = merged[merged.length - 1];
-        if (last && last.taskId === s.taskId && last.end === s.start && !!last.locked === !!s.locked) {
-          last.end = s.end;
-        } else {
-          merged.push({...s});
-        }
-      }
-      obj.segments = merged;
-      obj.totalMin = obj.segments.reduce((sum, seg) => seg.taskId === -1 ? sum : sum + (seg.end - seg.start), 0);
     }
 
     function getOpenPool(){
@@ -1951,6 +2165,9 @@ function plan(){
       return pool;
     }
 
+    // Zorunlu işlerin kalan süresi, OPEN dolgudan önce B1'in/teknisyenlerin boş zamanına verilir.
+    rescueLeftoverWork();
+
     const openPoolAfterFill = fillAllOpenGapsFromPool();
     // OPEN work is best-effort fill, but any residual must be visible rather than silently dropped.
     openPoolAfterFill.filter(item => item.remaining > 0).forEach(item => {
@@ -1964,7 +2181,7 @@ function plan(){
       });
     });
 
-    const taskIdsWithB1 = new Set(headObj.segments.filter(s => s.taskId !== -1 && s.taskId != null).map(s => s.taskId));
+    const taskIdsWithB1 = new Set(headObj.segments.filter(s => s.taskId !== -1 && s.taskId != null && s.kind !== 'support').map(s => s.taskId));
     const removedByB1Rule = new Set();
     techObjs.forEach(tech => {
       const kept = [];
@@ -2040,7 +2257,7 @@ function plan(){
       const task = tasksCopy.find(t => t.id === taskId);
       if (!task || task.isOpen) return; // OPEN dolgu işidir; kesilen kısım yeniden dağıtılmaz
       // İş, B1 onayından sonra bitmesin.
-      const approvalStarts = headObj ? headObj.segments.filter(s => s.taskId === taskId).map(s => s.start) : [];
+      const approvalStarts = headObj ? headObj.segments.filter(s => s.taskId === taskId && !s.kind).map(s => s.start) : [];
       const limitEnd = approvalStarts.length ? Math.min(...approvalStarts) : _workEnd_offset;
       let rest = minutes;
       const order = techObjs.slice().sort((a, b) =>
@@ -2056,11 +2273,14 @@ function plan(){
         }
         if (rest < 15) break;
       }
-      if (rest > 0) finalUnallocated.push({ task: task.name, minutes: rest, reason: 'Bu işte Supervisor çalışmayan saatlere denk geldiği için Teknisyene verilemedi ve başka kimseye sığmadı' });
+      if (rest > 0) finalUnallocated.push({ taskId, task: task.name, minutes: rest, rescuable: true, reason: 'Bu işte Supervisor çalışmayan saatlere denk geldiği için Teknisyene verilemedi ve başka kimseye sığmadı' });
     });
     mergeAndRecompute(techObjs);
   }
-  if (isGroup) enforceSupervision();
+  if (isGroup) {
+    enforceSupervision();
+    rescueLeftoverWork();
+  }
 
   if (isGroup) {
     techObjs.forEach((tech, idx) => {
@@ -2317,9 +2537,12 @@ function plan(){
       headDisplayHtml = '<div class="b1-list">' + allHeadSegs.map(s => {
         const realStart = m2t(workToReal(s.start, 'start'));
         const realEnd = m2t(workToReal(s.end, 'end'));
-        const isB1Only = b1OnlyKeys.has(`${s.start}-${s.end}-${s.taskId}`);
+        const isB1Only = s.kind === 'b1only' || b1OnlyKeys.has(`${s.start}-${s.end}-${s.taskId}`);
+        const isSupport = s.kind === 'support';
         const isOpenB1 = tasksCopy.find(t => t.id === s.taskId)?.isOpen;
-        const tag = isB1Only ? '<span class="b1-only-tag">B1-only</span>' : (isOpenB1 ? '<span class="b1-only-tag">OPEN fill</span>' : '');
+        const tag = isB1Only ? '<span class="b1-only-tag">B1-only</span>'
+          : isSupport ? '<span class="b1-only-tag" title="Teknisyenlere sığmayan kalan süre B1 boş zamanına yerleştirildi">B1 iş desteği</span>'
+          : (isOpenB1 ? '<span class="b1-only-tag">OPEN fill</span>' : '');
         return `<div class="b1-row${isB1Only ? ' b1-only' : ''}">
           <div class="b1-main-line">
             <span class="b1-task">${escHtml(s.taskName)}</span>
@@ -2333,10 +2556,12 @@ function plan(){
     }
     const headWorkTotal = allHeadSegs.reduce((s, seg) => s + (seg.end - seg.start), 0);
     const headOverflowTotal = headOverflowAssignments.reduce((s, h) => s + (h.end - h.start), 0);
+    const headSupportTotal = headSupportAssignments.reduce((s, h) => s + (h.end - h.start), 0);
     html += `<div class="card"><h2>👑 B1 Teknisyen Zaman Listesi <span class="role-tag head">${escHtml(headTech || '—')}</span></h2><div class="small" style="color:var(--muted);margin-bottom:8px">B1 için otomatik ayarlanan onay / B1-only zaman aralıkları aşağıdadır. Bu liste Supervisor Grup modunda da hesaplanır.</div>${headDisplayHtml}`;
     html += `<div class="stat" style="margin-top:10px">
       Toplam B1 yükü: <strong>${minutesToHoursStr(headWorkTotal)} saat</strong>
       ${headOverflowTotal > 0 ? ` – B1’e özel atanan iş yükü: <strong style="color:var(--warn)">${minutesToHoursStr(headOverflowTotal)} saat</strong>` : ''}
+      ${headSupportTotal > 0 ? ` – Kalan işe B1 iş desteği: <strong style="color:var(--warn)">${minutesToHoursStr(headSupportTotal)} saat</strong>` : ''}
     </div>`;
     html += `</div>`;
   }
@@ -2347,6 +2572,23 @@ function plan(){
       const covHtml = '<div class="warning" style="margin-top:0">⚠ Hiçbir Supervisor’e iş atanamadığı için denetim aralığı oluşmadı.</div>';
       html += `<div class="card"><h2>🛡 Supervisor Denetim Pencereleri</h2>${covHtml}</div>`;
     }
+  }
+
+  // Son plana göre: onayı işin son çalışma saatinden önce kalan işler (B1'de uygun boş zaman bulunamadı).
+  recomputeTaskTimeline();
+  const earlyApprovals = [];
+  if (headObj) {
+    tasksCopy.filter(t => !t.isOpen && !b1OnlyTaskIds.has(t.id)).forEach(t => {
+      const approvals = headObj.segments.filter(sg => sg.taskId === t.id && !sg.kind);
+      const taskEnd = taskFinalEnd.get(t.id);
+      if (!approvals.length || taskEnd === null || taskEnd === undefined) return;
+      const last = approvals.reduce((a, b) => (b.end > a.end ? b : a));
+      if (last.end < taskEnd) earlyApprovals.push({ taskName: t.name, from: last.start, to: last.end, taskEnd });
+    });
+  }
+  if (earlyApprovals.length > 0) {
+    const rows = earlyApprovals.map(w => `<div class="small">⚠ <strong>${escHtml(w.taskName)}</strong> – B1 onayı ${m2t(workToReal(w.from, 'start'))} - ${m2t(workToReal(w.to, 'end'))}; işte bu saatten sonra da çalışma var (son çalışma bitişi ${m2t(workToReal(w.taskEnd, 'end'))}).</div>`).join('');
+    html += `<div class="attention"><strong>⚠ B1 Onayı İş Bitişinden Önce</strong><br><div class="small" style="margin:6px 0">B1'in uygun boş zamanı bulunamadığı için aşağıdaki işlerin onayı, işin son çalışma saatinden önceye yerleştirildi. Gerekirse B1 dolu saatlerini veya iş dağılımını gözden geçirin.</div>${rows}</div>`;
   }
 
   if (isGroup && supervisionGaps.length > 0) {
@@ -2416,7 +2658,7 @@ function plan(){
         .map(s => ({ teknisyen: p.name, baslangic: m2t(s.start), bitis: m2t(s.end) })))
         .sort((a, b) => a.baslangic.localeCompare(b.baslangic)),
       b1_onay: headObj ? headObj.segments.filter(s => s.taskId === i)
-        .map(s => ({ baslangic: m2t(workToReal(s.start, 'start')), bitis: m2t(workToReal(s.end, 'end')) })) : []
+        .map(s => ({ baslangic: m2t(workToReal(s.start, 'start')), bitis: m2t(workToReal(s.end, 'end')), ...(s.kind === 'support' ? { tur: 'B1 iş desteği' } : s.kind === 'b1only' ? { tur: 'B1-only' } : {}) })) : []
     })),
     teknisyen_atamalari: perTech.map(p => ({
       teknisyen: p.name,
@@ -2431,7 +2673,8 @@ function plan(){
     b1_atamalari: headObj ? headObj.segments.filter(s => s.taskId !== -1).map(s => ({
       is_no: s.taskName,
       baslangic: m2t(workToReal(s.start, 'start')),
-      bitis: m2t(workToReal(s.end, 'end'))
+      bitis: m2t(workToReal(s.end, 'end')),
+      ...(s.kind === 'support' ? { tur: 'B1 iş desteği' } : s.kind === 'b1only' ? { tur: 'B1-only' } : {})
     })) : [],
     tek_is_esit_paylasim: equalShareSummary || undefined,
     atanmayan_isler: finalUnallocated.map(u => ({
