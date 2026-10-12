@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Uçak Bakım İş Planlama Sistemi – v21.9</title>
-<link rel="stylesheet" href="style.css?v=20261005a"/>
+<title>Uçak Bakım İş Planlama Sistemi – v22.0</title>
+<link rel="stylesheet" href="style.css?v=20261013a"/>
 </head>
 <body class="mode-all">
 <a href="https://ovarthy-bot.github.io/navigasyon/" class="home-btn" title="Ana Sayfaya Git">🏠</a>
 <div class="container" id="container">
   <header>
-    <h1>✈️ Adam Saat Dağıtma Uygulaması <span style="font-size: 0.8em; opacity: 0.8; font-weight: 400;">v21.9</span></h1>
+    <h1>✈️ Adam Saat Dağıtma Uygulaması <span style="font-size: 0.8em; opacity: 0.8; font-weight: 400;">v22.0</span></h1>
     <div class="header-dev">Geliştirici: ovar@thy.com</div>
   </header>
 
@@ -119,7 +119,7 @@
         <input type="time" id="preAssignEnd">
         <button class="btn btn-add" id="addPreAssign" style="padding:8px 12px;font-size:0.9rem;">+ Ekle</button>
       </div>
-      <div class="small" style="margin-top:6px;color:var(--muted)">Girilen blok sabittir; algoritma onu taşımaz ve işin kalan süresini diğer teknisyenlere dağıtır.</div>
+      <div class="small" style="margin-top:6px;color:var(--muted)">Girilen blok algoritma tarafından taşınmaz. Vardiya/dolu saat çakışmaları reddedilir; Grup modunda Teknisyen için aynı işte aynı anda Supervisor yoksa denetimsiz bölüm plana alınmaz ve uyarı gösterilir.</div>
       <div id="preAssigns" style="margin-top:8px;"></div>
     </div>
   </details>
@@ -127,10 +127,10 @@
   <div id="results"></div>
 
   <div class="card">
-    <button class="btn-plan" id="planBtn">🚀 İş Planını Oluştur (v21.9)</button>
+    <button class="btn-plan" id="planBtn">🚀 İş Planını Oluştur (v22.0)</button>
   </div>
 </div>
 
-<script src="script.js?v=20261008a"></script>
+<script src="script.js?v=20261013a"></script>
 </body>
 </html>
