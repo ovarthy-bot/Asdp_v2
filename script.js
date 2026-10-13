@@ -87,12 +87,12 @@ function applyAlgoUI(){
   const algoDesc = $('algoDescription');
   if (algoDesc) {
     const now = sensitivity <= 20
-      ? 'Şu an: tüm teknisyenler neredeyse aynı işleri aynı saat aralıklarında yapar; B1 onayları işlerin doğal bitişine göre dağılır ve düzenli olmayabilir.'
+      ? 'Şu an: ekipteki herkes mümkün olduğunca aynı işleri aynı saat aralıklarında yapar, iş parçaları en aza iner; B1 onayları işlerin doğal bitişine göre dağılır ve düzenli olmayabilir.'
       : sensitivity >= 80
-        ? "Şu an: B1 onayları eşit aralıklara oturtulur; diğer teknisyenlerin işleri ve saat aralıkları B1'in bu düzenine göre ayarlanır (iş parçaları daha bölünmüş olabilir)."
+        ? "Şu an: B1 onayları eşit aralıklara oturtulur; işlerin başlangıçları gerekirse ötelenerek bitişler B1'in bu düzenine göre ayarlanır (ekip içindeki ortak çalışma ve iş sırası korunur, araya boş aralıklar girebilir)."
         : 'Şu an: ikisi arasında bir denge kurulur; işlerin bitişleri doğal sıradan B1 düzenine doğru kısmen kaydırılır.';
-    algoDesc.innerHTML = `<strong>Sol:</strong> tüm teknisyenler birbirinin neredeyse aynı işlerini aynı saat aralıklarında yapar, B1 onayları düzensiz olabilir. <strong>Sağ:</strong> B1 teknisyenin onay aralıkları düzenli olur, diğer teknisyenlerin iş ve saatleri B1'e göre ayarlanır.<br>` +
-      `Her teknisyen programda <strong>tek bir ekipte (grupta)</strong> yer alır. Adam saat dağıtımı birden fazla ekip düzeniyle yapılabiliyorsa plan oluşturulduktan sonra senaryolardan birini kendiniz seçebilirsiniz. Her iki uçta da Supervisor denetimi, B1 onayı ve iş süresi sınırları aynen korunur.<br>${now}`;
+    algoDesc.innerHTML = `<strong>Sol:</strong> teknisyenler az parçalı çalışır; ekipteki herkes aynı işi aynı saat aralığında yapar, B1 onayları düzensiz olabilir. <strong>Sağ:</strong> B1 teknisyenin onay aralıkları düzenli olur, işlerin saatleri B1'e göre ayarlanır.<br>` +
+      `Teknisyenler birden fazla <strong>ekibe (gruba)</strong> bölünebilir, ancak her teknisyen programda <strong>tek bir ekipte</strong> yer alır ve aynı ekipteki herkes aynı işi aynı saat aralığında yapar. Bir işin süresi ekip büyüklüğüne tam bölünmüyorsa artan kısım ekibin yalnızca bir bölümüne ayrı satırda verilir; ekip büyüklükleri işlerin süresine en uygun düzenlenmek üzere plan oluşturulduktan sonra senaryolar olarak listelenir ve kendiniz seçebilirsiniz. Her iki uçta da Supervisor denetimi, B1 onayı ve iş süresi sınırları aynen korunur.<br>${now}`;
   }
 }
 
@@ -1226,27 +1226,32 @@ function plan(opts){
     tasksCopy.sort((a, b) => b.techWorkMin - a.techWorkMin);
 
     // ============================================================
-    // Ekip tabanlı dağıtım çekirdeği
+    // Ekip dalgası çekirdeği
     // ------------------------------------------------------------
-    // Bir senaryoda teknisyenler sabit ekiplere (gruplara) bölünür; her teknisyen yalnızca tek bir ekipte
-    // yer alır. Zaman 15 dk'lık hücrelere bölünür ve bir iş parçası bir ekibin hücrelerine yerleşir: o
-    // hücrede ekibin müsait üyeleri aynı işi aynı saatte yapar. Grup modunda bir Teknisyen yalnızca aynı
-    // hücrede aynı işi yapan bir Supervisor ile birlikte iş alır; denetimsiz yerleşim hiçbir adımda yapılmaz.
-    //  1) Dağıtım   : işler (büyükten küçüğe) ekiplere kapasiteleri oranında verilir; sığmayan iş bölünür.
-    //  2) Doğal sıra: her ekip kendi işlerini küçükten büyüğe, vardiya başından itibaren yapar; işin doğal bitişi bulunur.
-    //  3) Hassasiyet: işin bitiş hedefi, doğal bitişten eşit aralıklı B1 onay hedefine doğru hassasiyet oranında
-    //                 kaydırılır (0 = teknisyen eşitliği / doğal sıra, 1 = düzenli B1 onayları).
-    //  4) Yerleşim  : işler hedef bitişlerine göre sırayla, hedeften geriye doğru en geç boş hücrelere yerleştirilir;
-    //                 böylece iş tam hedef saatinde biter ve B1 onayı oraya oturur.
+    // Bir senaryoda teknisyenler sabit ekiplere (gruplara) bölünür; her teknisyen yalnızca tek bir ekipte yer alır.
+    // Bir ekip tek vücut gibi çalışır: ekibin müsait üyeleri aynı işi aynı saat aralığında yapar. Zaman 15 dk'lık hücrelere
+    // bölünür; bir iş ekibin hücrelerine yerleşir ve o hücrede ekibin tüm müsait üyeleri çalışır.
+    //  1) Dağıtım   : işler ekiplere, parçaları ekip büyüklüğünün katı olacak biçimde verilir (lockstepPlan). Katın dışında
+    //                 kalan artık birimler (ör. 3 kişilik ekibe 11 birim = 3 tam hücre + 2 birim) yalnızca ekibin bir
+    //                 kısmına düşer; dağıtım bu artığı, işin bölünmesini ve ekip bitiş sürelerinin dengesizliğini en aza indirir.
+    //  2) Yerleşim  : her ekip için dört aday kurulur ve ekip kartının gerçek parça + satır sayısına (Grup modunda
+    //                 Teknisyen–Supervisor birebir eşleştirme bölmeleri dahil) göre en iyisi seçilir:
+    //                 şerit (işler ardışık, yarım hücre iki iş arasında paylaşılır; iki iş sırası) ve hücre hizalı
+    //                 (işin tam hücreleri tüm ekiple, artıklar karma hücrelerde alt takımlarla; iki dizilim).
+    //  3) Hassasiyet: işin bitiş hedefi, doğal bitişten eşit aralıklı B1 onay hedefine doğru kaydırılır (computeDeadlines);
+    //                 iş parçalanmadan başlangıcı ötelenir (araya boş aralık girer), sol uçta öteleme yoktur.
     // Harcanan süre hiçbir zaman işin kalan işçilik bütçesini (techWorkMin) aşmaz; sığmayan kısım atanamayan olarak raporlanır.
+    // Grup modunda bir Teknisyen yalnızca aynı hücrede aynı işi yapan bir Supervisor ile birlikte iş alır; denetimsiz
+    // yerleşim hiçbir adımda yapılmaz.
     // ============================================================
     const CELL = 15;
     const GRID_K = Math.floor(_workEnd_offset / CELL);
     const MIN_RUN = 2;
-    const FIT_SLACK = 2;
     const roleOf = i => techObjs[i].role;
     const b1Blocks = normalizeWorkBlocks(load('asdp_headBlocks', []));
     const b1Blocked = f => b1Blocks.some(b => (f - 1) * CELL < b.end && f * CELL > b.start);
+    let b1FreeCells = 0;
+    for (let k = 1; k <= GRID_K; k++) if (!b1Blocked(k)) b1FreeCells++;
 
     function makeGrid(){
       return {
@@ -1258,7 +1263,6 @@ function plan(opts){
         load: techObjs.map(t => t.totalMin / CELL)
       };
     }
-    const cloneGrid = g => ({ occ: g.occ.map(a => a.slice()), load: g.load.slice() });
 
     // k hücresinde ekibin kullanılabilir üyeleri: müsait olanlar; Grup modunda ekipte müsait Supervisor yoksa Teknisyenler çıkar.
     function usableAt(grid, crew, k){
@@ -1294,7 +1298,30 @@ function plan(opts){
       return withSup;
     }
 
-    // units (15 dk'lık kişi-birimi) kadar işi ekibin hücrelerine yerleştirir.
+    // Şerit yerleşimi: units kadar işi ekibin hücrelerine from hücresinden başlayarak ardışık yerleştirir. Her hücrede ekibin
+    // kullanılabilir tüm üyeleri çalışır; son hücrede kalan birim azsa yalnızca o kadar üye alınır, hücrenin kalanı sonraki
+    // işe bırakılır. marks verilirse yerleşilen hücreler marks'a da yazılır (undoMarks ile geri alınır; onCell yoksa yalnızca deneme).
+    function placeBlock(grid, crew, units, from, onCell, marks){
+      let rem = units, first = -1, last = -1, prevK = -10, prevSet = new Set();
+      for (let k = Math.max(0, from); k < GRID_K && rem > 0; k++) {
+        const u = usableAt(grid, crew, k);
+        if (!u.length) continue;
+        const ps = pickParticipants(grid, u, rem, k - prevK === 1 ? prevSet : new Set());
+        if (!ps.length) continue;
+        ps.forEach(p => { grid.occ[p][k] = 1; grid.load[p] += 1; if (marks) marks.push([p, k]); if (onCell) onCell(p, k); });
+        rem -= ps.length;
+        prevK = k; prevSet = new Set(ps);
+        if (first < 0) first = k;
+        last = k;
+      }
+      return { placed: units - rem, first, last };
+    }
+    function undoMarks(grid, marks){
+      marks.forEach(([p, k]) => { grid.occ[p][k] = 0; grid.load[p] -= 1; });
+      marks.length = 0;
+    }
+
+    // units (15 dk'lık kişi-birimi) kadar işi ekibin hücrelerine yerleştirir. Şeride sığmayan artıklar ve OPEN işler için.
     //  dir 'fwd': vardiya başından ileri doğru; dir 'bwd': bound hücresinden geriye doğru (olmazsa bound'dan sonrasına).
     // Kısa (MIN_RUN'dan az) boşluklar önce atlanır; böylece iş mümkün olduğunca ardışık hücrelerde toplanır.
     function placePiece(grid, crew, units, dir, bound, onCell){
@@ -1349,72 +1376,44 @@ function plan(opts){
     }
 
     const freeUnits = (grid, crew) => { let s = 0; for (let k = 0; k < GRID_K; k++) s += usableAt(grid, crew, k).length; return s; };
+    // Ekibin işe katılabilecek üye sayısı (günü tamamen dolu olanlar sayılmaz).
+    const crewSize = (grid, crew) => Math.max(1, crew.filter(p => grid.occ[p].some(v => !v)).length);
 
-    // Adım 1: işleri ekiplere paylaştır. Her ekibe kapasitesi oranında yük düşer (kişi başı yük eşitlenir);
-    // iş mümkünse bölünmeden tek ekibe verilir, sığmayan iş en az sayıda ekibe bölünür.
-    function planAllocation(jobs, grid){
-      const capU = crews.map(crew => freeUnits(grid, crew));
-      const capSum = capU.reduce((a, b) => a + b, 0);
-      const totalU = jobs.reduce((a, j) => a + j.units, 0);
-      const target = capU.map(c => (capSum ? totalU * c / capSum : 0));
-      const assigned = crews.map(() => 0);
-      const alloc = new Map();
-      jobs.slice().sort((a, b) => b.units - a.units || a.id - b.id).forEach(j => {
-        let need = j.units;
-        const parts = [];
-        const room = c => Math.max(0, capU[c] - assigned[c]);
-        const fit = crews.map((_, c) => c)
-          .filter(c => room(c) >= need && target[c] - assigned[c] >= need - FIT_SLACK)
-          .sort((a, b) => (target[a] - assigned[a]) - (target[b] - assigned[b]) || a - b)[0];
-        if (fit !== undefined) {
-          parts.push({ c: fit, units: need });
-          assigned[fit] += need;
-          need = 0;
-        } else {
-          const order = crews.map((_, c) => c).sort((a, b) => (target[b] - assigned[b]) - (target[a] - assigned[a]) || a - b);
-          for (const pass of [0, 1]) {
-            for (const c of order) {
-              if (need <= 0) break;
-              const cap = pass === 0 ? Math.min(room(c), Math.max(0, Math.ceil(target[c] - assigned[c] - 1e-9))) : room(c);
-              const takeU = Math.min(need, cap);
-              if (takeU <= 0) continue;
-              const ex = parts.find(p => p.c === c);
-              if (ex) ex.units += takeU; else parts.push({ c, units: takeU });
-              assigned[c] += takeU;
-              need -= takeU;
-            }
-          }
+    // Bir ekibin işlerini (parçalarını) şeritte sıralar. Ardışık işlerin toplam birimi ekip büyüklüğünün katına denk geldikçe
+    // bir sonraki iş hücre sınırında başlar (yarım hücre paylaşan iş sayısı en aza iner); eşitlikte kısa işler önce gelir.
+    function orderCrewPieces(pcs, g){
+      const m = pcs.length;
+      const bySize = pcs.slice().sort((a, b) => a.units - b.units || a.job.id - b.job.id);
+      if (m <= 1 || g <= 1 || m > 10) return bySize;
+      const N = 1 << m;
+      const sum = new Array(N).fill(0);
+      for (let s = 1; s < N; s++) { const low = s & -s; sum[s] = sum[s ^ low] + bySize[31 - Math.clz32(low)].units; }
+      const val = new Array(N).fill(-Infinity), from = new Array(N).fill(-1);
+      val[0] = 0;
+      for (let s = 1; s < N; s++) {
+        const gain = (sum[s] % g === 0 ? 1e6 : 0) - sum[s];
+        for (let i = 0; i < m; i++) {
+          if (!(s & (1 << i))) continue;
+          const v = val[s ^ (1 << i)] + gain;
+          if (v > val[s]) { val[s] = v; from[s] = i; }
         }
-        alloc.set(j.id, { parts, leftover: need });
-      });
-      return alloc;
+      }
+      const out = [];
+      for (let s = N - 1; s > 0; s ^= (1 << from[s])) out.push(bySize[from[s]]);
+      return out.reverse();
     }
 
-    // Adım 2: her ekip işlerini küçükten büyüğe, vardiya başından itibaren yapsaydı işlerin bitiş hücreleri (doğal bitiş).
-    function naturalPass(jobs, alloc, grid){
-      const g = cloneGrid(grid);
-      const fin = new Map();
-      crews.forEach((crew, c) => {
-        const pieces = [];
-        jobs.forEach(j => { (alloc.get(j.id)?.parts || []).forEach(p => { if (p.c === c) pieces.push({ job: j, units: p.units }); }); });
-        pieces.sort((x, y) => x.job.units - y.job.units || x.job.id - y.job.id);
-        pieces.forEach(pc => {
-          const r = placePiece(g, crew, pc.units, 'fwd', 0, () => {});
-          if (r.placed > 0) fin.set(pc.job.id, Math.max(fin.get(pc.job.id) || 0, r.last + 1));
-        });
-      });
-      return fin;
-    }
-
-    // Adım 3: bitiş hedefleri. Doğal bitişler sırasıyla eşit aralıklı hedeflere (son iş değişmez) sens oranında yaklaştırılır;
-    // hedef hiçbir zaman doğal bitişten erken olmaz (erken hedef yerleştirilemeyeceği için). sens küçükse hedef = doğal bitiş.
+    // Bitiş hedefleri. Doğal bitişler sırasıyla eşit aralıklı hedeflere (son iş değişmez) yaklaştırılır; hedef hiçbir zaman
+    // doğal bitişten erken olmaz (erken hedef yerleştirilemeyeceği için). Yaklaşma oranı hassasiyetin karesidir: çubuğun sol
+    // yarısında işler neredeyse hiç ötelenmez (teknisyenlerin işleri arasına boşluk girmez), sağ uçta tam eşit aralık hedeflenir.
     function computeDeadlines(jobs, fin){
+      const pull = sens * sens;
       const list = jobs.filter(j => fin.has(j.id)).map(j => ({ j, n: fin.get(j.id) }))
         .sort((a, b) => a.n - b.n || a.j.units - b.j.units || a.j.id - b.j.id);
       const cnt = list.length;
       const tEnd = cnt ? Math.max(...list.map(x => x.n)) : 0;
-      const f = list.map((x, r) => Math.min(GRID_K, x.n + Math.round(sens * Math.max(0, Math.ceil(tEnd * (r + 1) / cnt) - x.n))));
-      if (sens > 0.15) {
+      const f = list.map((x, r) => Math.min(GRID_K, x.n + Math.round(pull * Math.max(0, Math.ceil(tEnd * (r + 1) / cnt) - x.n))));
+      if (pull > 0.1) {
         // B1 onayları (işin son hücresi) üst üste binmesin ve B1'in dolu saatine denk gelmesin.
         let prev = 0;
         for (let r = 0; r < cnt; r++) {
@@ -1438,35 +1437,222 @@ function plan(opts){
       taskSegments.get(job.task.id).push({ techIndex: p, start, end: start + CELL });
     };
 
-    // Adım 4: hedef bitişe göre sıralı, geriye doğru yerleşim. Ekip kapasitesi yetmeyen kısım diğer ekiplerin boşluklarına taşar.
+    // Tek hücrede units kişi-birimi: hücrenin kullanılabilir üyelerinden units kadarı (Grup modunda Supervisor kuralıyla) çalışır.
+    // Hücrede yeterli üye yoksa yerleşmez.
+    function placeTail(grid, crew, units, k, onCell, marks){
+      const u = usableAt(grid, crew, k);
+      if (u.length < units) return false;
+      const ps = pickParticipants(grid, u, units, new Set());
+      if (ps.length !== units) return false;
+      ps.forEach(p => { grid.occ[p][k] = 1; grid.load[p] += 1; if (marks) marks.push([p, k]); if (onCell) onCell(p, k); });
+      return true;
+    }
+
+    // Bir işin parçasını (ekipteki payını) başlangıcı öteleyerek en geç hangi hücrede başlatabileceğimizi bulur:
+    // blok target hücresinde ya da öncesinde biter. slack gecikme bütçesidir (hücre).
+    function latestStart(grid, crew, units, cur, target, slack){
+      let best = cur;
+      for (let s = cur + 1; s <= cur + slack; s++) {
+        const mk = [];
+        const r = placeBlock(grid, crew, units, s, null, mk);
+        undoMarks(grid, mk);
+        if (!(r.placed >= units && r.last + 1 <= target)) break;
+        best = s;
+      }
+      return best;
+    }
+
+    // Yerleşim biçimleri. Her biri ekibin parçalarını (pcs: {job, units, natEnd}) yerleştirir ve { left, ends } döner:
+    //   left : yerleşmeyen birimler (iş no -> birim), ends : parça -> bitiş hücresi (yerleşemediyse null).
+    // rec (iş -> hücre yazıcı) verilirse gerçek yerleşim yapılır; marks verilirse yalnızca denenir (çağıran undoMarks ile geri alır).
+    // shiftOf(job): hassasiyetin işin bitişini doğal bitişinden kaydırdığı hücre; slack: izin verilen toplam gecikme.
+
+    // Şerit: işler ardışık, hücre hücre dizilir; ardışık iki iş yarım hücre paylaşabilir (boşluk kalmaz).
+    function layoutTape(grid, crew, pcs, g, shiftOf, slack, rec, marks, spt){
+      const left = new Map(), ends = new Map();
+      let cur = 0;
+      (spt ? pcs.slice().sort((a, b) => a.units - b.units || a.job.id - b.job.id) : orderCrewPieces(pcs, g)).forEach(pc => {
+        let from = cur;
+        const shift = slack > 0 && pc.natEnd !== null ? shiftOf(pc.job) : 0;
+        if (shift > 0) {
+          from = latestStart(grid, crew, pc.units, cur, Math.min(GRID_K, pc.natEnd + shift), slack);
+          slack -= from - cur;
+        }
+        const r = placeBlock(grid, crew, pc.units, from, rec ? rec(pc.job) : null, marks);
+        ends.set(pc, r.placed >= pc.units ? r.last + 1 : null);
+        if (r.placed > 0) cur = r.last;
+        if (r.placed < pc.units) left.set(pc.job.id, (left.get(pc.job.id) || 0) + pc.units - r.placed);
+      });
+      return { left, ends };
+    }
+
+    // Hücre hizalı: ekip büyüklüğü g iken bir iş q = ⌊birim/g⌋ tam hücre (ekibin tüm üyeleri) + r = birim mod g birimlik
+    // artıktan oluşur. Tam hücreler ardışık bloktur; hiçbir iş hücrenin ortasında başlamaz/bitmez. Artıklar (r), ekibin
+    // alt takımlarıyla "karma hücrelere" birlikte dizilir (bir hücrede birkaç işin artığı yan yana çalışır) ve işin tam hücrelerinin
+    // hemen öncesine konur. Böylece her işte yalnızca artık üyeleri fazladan bir parça alır; şeritteki gibi bir hücrenin her iki
+    // yanındaki işlerin tüm üyeleri bölünmez. Artıklardan dolayı hücre içinde boşta kalan üyeler olabilir.
+    function layoutAligned(grid, crew, pcs, g, shiftOf, slack, rec, marks, sandwich){
+      const left = new Map(), endCell = new Map();
+      const addLeft = (pc, n) => { if (n > 0) left.set(pc.job.id, (left.get(pc.job.id) || 0) + n); };
+      const parts = pcs.map(pc => ({ pc, q: Math.floor(pc.units / g), r: pc.units % g }));
+      const noteEnd = (pc, cell) => endCell.set(pc, Math.max(endCell.get(pc) || 0, cell));
+
+      // Artıkları en büyükten başlayarak karma hücrelere (kutulara) diz.
+      const bins = [];
+      parts.filter(p => p.r > 0).sort((a, b) => b.r - a.r || a.pc.job.id - b.pc.job.id).forEach(t => {
+        const bin = bins.find(b => b.used + t.r <= g);
+        if (bin) { bin.items.push(t); bin.used += t.r; } else bins.push({ items: [t], used: t.r });
+      });
+      const groups = bins.map(b => ({ tails: b.items, mains: b.items.filter(x => x.q > 0), key: Math.min(...b.items.map(x => x.pc.units)) }));
+      parts.filter(p => p.r === 0).forEach(p => groups.push({ tails: [], mains: [p], key: p.pc.units }));
+      groups.sort((a, b) => a.key - b.key || (a.tails[0] || a.mains[0]).pc.job.id - (b.tails[0] || b.mains[0]).pc.job.id);
+
+      let cur = 0;
+      const placeMain = m => {
+        const units = m.q * g;
+        let from = cur;
+        const shift = slack > 0 && m.pc.natEnd !== null ? shiftOf(m.pc.job) : 0;
+        if (shift > 0) {
+          from = latestStart(grid, crew, units, cur, Math.min(GRID_K, m.pc.natEnd + shift), slack);
+          slack -= from - cur;
+        }
+        const r = placeBlock(grid, crew, units, from, rec ? rec(m.pc.job) : null, marks);
+        addLeft(m.pc, units - r.placed);
+        if (r.placed > 0) { noteEnd(m.pc, r.last + 1); cur = r.last + 1; }
+      };
+      groups.forEach(gr => {
+        // sandwich: ilk işin tam hücreleri karma hücreden önce gelir (artığı kendi bloğunun hemen ardında kalır).
+        let rest = gr.mains.slice().sort((a, b) => a.q - b.q || a.pc.job.id - b.pc.job.id);
+        if (sandwich && gr.tails.length > 1 && rest.length) placeMain(rest.shift());
+        gr.mains = rest;
+        let tailEnd = cur;
+        gr.tails.forEach(t => {
+          let k = cur;
+          while (k < GRID_K && !placeTail(grid, crew, t.r, k, rec ? rec(t.pc.job) : null, marks)) k++;
+          if (k < GRID_K) { noteEnd(t.pc, k + 1); tailEnd = Math.max(tailEnd, k + 1); return; }
+          // Artık tek hücreye sığmıyor (müsait üye az): şerit gibi ardışık hücrelere yayılır.
+          const r = placeBlock(grid, crew, t.r, cur, rec ? rec(t.pc.job) : null, marks);
+          addLeft(t.pc, t.r - r.placed);
+          if (r.placed > 0) { noteEnd(t.pc, r.last + 1); tailEnd = Math.max(tailEnd, r.last + 1); }
+        });
+        cur = tailEnd;
+        gr.mains.slice().sort((a, b) => a.q - b.q || a.pc.job.id - b.pc.job.id).forEach(m => placeMain(m));
+      });
+      const ends = new Map();
+      pcs.forEach(pc => ends.set(pc, left.has(pc.job.id) || !endCell.has(pc) ? null : endCell.get(pc)));
+      return { left, ends };
+    }
+
+    const piecesOf = (jobs, alloc, c) => {
+      const pcs = [];
+      jobs.forEach(j => (alloc.get(j.id)?.parts || []).forEach(p => { if (p.c === c) pcs.push({ job: j, units: p.units, natEnd: null }); }));
+      return pcs;
+    };
+
+    // Yerleşim biçimi adayları: şerit (iş sırası: yarım hücre en az / kısa iş önce) ve hücre hizalı (karma hücre iki türlü).
+    const LAYOUT_FNS = [
+      (a, b, c, d, e, f, g, h) => layoutTape(a, b, c, d, e, f, g, h, false),
+      (a, b, c, d, e, f, g, h) => layoutTape(a, b, c, d, e, f, g, h, true),
+      (a, b, c, d, e, f, g, h) => layoutAligned(a, b, c, d, e, f, g, h, false),
+      (a, b, c, d, e, f, g, h) => layoutAligned(a, b, c, d, e, f, g, h, true)
+    ];
+
+    // Bir yerleşimi gecikmesiz dener ve kalitesini ölçer: ekip üyelerinin toplam parça sayısı (Grup modunda Teknisyen
+    // parçalarının Supervisor parçalarıyla birebir eşleştirilmesi için yapılacak bölmeler dahil) + ekibin farklı (iş, saat
+    // aralığı) satır sayısı + işler arasındaki boşta kalma. Küçük olan daha az parçalı ve ekip içinde daha aynıdır.
+    function evalLayout(grid, crew, pcs, g, fn){
+      const cells = [], marks = [];
+      const res = fn(grid, crew, pcs, g, () => 0, 0, job => (p, k) => cells.push([p, k, job.id]), marks);
+      undoMarks(grid, marks);
+      const complete = res.left.size === 0 && [...res.ends.values()].every(v => v !== null);
+      const tmp = techObjs.map(() => ({ segments: [] }));
+      cells.sort((x, y) => x[0] - y[0] || x[2] - y[2] || x[1] - y[1]);
+      cells.forEach(([p, k, id]) => {
+        const sg = tmp[p].segments, last = sg[sg.length - 1];
+        if (last && last.taskId === id && last.end === k * CELL) last.end += CELL;
+        else sg.push({ start: k * CELL, end: (k + 1) * CELL, taskId: id });
+      });
+      if (isGroup) alignSupervisionPieces(tmp, techRoles);
+      let pieces = 0, maxEnd = 0, idle = 0;
+      const lines = new Set();
+      crew.forEach(p => {
+        const segs = tmp[p].segments.slice().sort((a, b) => a.start - b.start);
+        segs.forEach((sg, i) => {
+          pieces++; lines.add(sg.taskId + '|' + sg.start + '|' + sg.end); maxEnd = Math.max(maxEnd, sg.end);
+          if (i && sg.start > segs[i - 1].end && isFreeRange(techObjs[p], segs[i - 1].end, sg.start)) idle++; // iki iş arasında boşta kalma
+        });
+      });
+      return { res, complete, cost: pieces + lines.size + 0.5 * idle + 0.01 * maxEnd / CELL };
+    }
+
     function scheduleCrewPlan(mandatoryList, openList){
       const grid = makeGrid();
       const toJob = t => ({ id: t.id, task: t, units: Math.floor(t.techWorkMin / CELL) });
       const jobs = mandatoryList.filter(t => t.techWorkMin >= CELL).map(toJob);
       if (jobs.length) {
-        const alloc = planAllocation(jobs, grid);
-        const deadlines = computeDeadlines(jobs, naturalPass(jobs, alloc, grid));
+        const G = crews.map(crew => crewSize(grid, crew));
+        const alloc = lockstepPlan(jobs, G, crews.map(crew => freeUnits(grid, crew)), 'full', b1FreeCells).alloc;
+        const crewPieces = crews.map((_, c) => piecesOf(jobs, alloc, c));
+        // Doğal geçiş: her ekip için biçim seçilir ve işlerin gecikmesiz (doğal) bitiş hücreleri bulunur.
+        const fin = new Map();
+        const layouts = crews.map((crew, c) => {
+          const pcs = crewPieces[c];
+          let best = null;
+          LAYOUT_FNS.forEach(fn => {
+            const ev = evalLayout(grid, crew, pcs, G[c], fn);
+            if (ev.complete && (!best || ev.cost < best.ev.cost - 1e-9)) best = { fn, ev };
+          });
+          if (!best) {
+            // Hiçbir biçim işleri eksiksiz sığdıramıyor (kapasite dar): en sıkı yerleşen şerit kullanılır.
+            const marks = [];
+            const res = LAYOUT_FNS[0](grid, crew, pcs, G[c], () => 0, 0, null, marks);
+            undoMarks(grid, marks);
+            best = { fn: LAYOUT_FNS[0], ev: { res } };
+          }
+          pcs.forEach(pc => {
+            pc.natEnd = best.ev.res.ends.get(pc);
+            if (pc.natEnd !== null) fin.set(pc.job.id, Math.max(fin.get(pc.job.id) || 0, pc.natEnd));
+          });
+          return best.fn;
+        });
+        const deadlines = computeDeadlines(jobs, fin);
         const bound = j => (deadlines.has(j.id) ? deadlines.get(j.id) : GRID_K);
+        const shiftOf = j => (fin.has(j.id) ? Math.max(0, bound(j) - fin.get(j.id)) : 0);
+        // Gerçek yerleşim: önce hedef bitişe göre öteleme denenir; ekibin işleri sığmazsa ötelemesiz yerleşir.
+        const left = new Map();
+        crews.forEach((crew, c) => {
+          const pcs = crewPieces[c];
+          const fn = layouts[c];
+          const complete = pcs.every(pc => pc.natEnd !== null);
+          let slack = complete ? GRID_K - pcs.reduce((m, pc) => Math.max(m, pc.natEnd), 0) : 0;
+          if (slack > 0) {
+            const marks = [];
+            const res = fn(grid, crew, pcs, G[c], shiftOf, slack, null, marks);
+            undoMarks(grid, marks);
+            if (res.left.size > 0 || [...res.ends.values()].some(v => v === null)) slack = 0;
+          }
+          fn(grid, crew, pcs, G[c], shiftOf, slack, recFor, null).left.forEach((n, id) => left.set(id, (left.get(id) || 0) + n));
+        });
+        // Yerleşemeyen birimler: önce işin kendi ekip(ler)inin, sonra boşluğu en çok olan ekiplerin kalan boşluklarına taşar.
         jobs.slice().sort((a, b) => bound(a) - bound(b) || b.units - a.units || a.id - b.id).forEach(j => {
           const a = alloc.get(j.id);
-          let left = a.leftover;
-          a.parts.forEach(pt => {
-            left += pt.units - placePiece(grid, crews[pt.c], pt.units, 'bwd', bound(j), recFor(j)).placed;
-          });
-          if (left > 0) {
-            const order = crews.map((_, c) => c).sort((x, y) => freeUnits(grid, crews[y]) - freeUnits(grid, crews[x]) || x - y);
+          let rest = a.leftover + (left.get(j.id) || 0);
+          if (rest > 0) {
+            const own = new Set(a.parts.map(p => p.c));
+            const order = crews.map((_, c) => c).sort((x, y) => (own.has(y) - own.has(x)) || freeUnits(grid, crews[y]) - freeUnits(grid, crews[x]) || x - y);
             for (const c of order) {
-              if (left <= 0) break;
-              left -= placePiece(grid, crews[c], left, 'bwd', bound(j), recFor(j)).placed;
+              if (rest <= 0) break;
+              rest -= placePiece(grid, crews[c], rest, 'bwd', bound(j), recFor(j)).placed;
             }
           }
-          if (left > 0) unallocated.push({ taskId: j.task.id, task: j.task.name, minutes: left * CELL, reason: 'Teknisyen kapasitesi doldu; mümkün olan kısım teknisyenlere dağıtıldı' });
+          if (rest > 0) unallocated.push({ taskId: j.task.id, task: j.task.name, minutes: rest * CELL, reason: 'Teknisyen kapasitesi doldu; mümkün olan kısım teknisyenlere dağıtıldı' });
         });
       }
       // OPEN işler zorunlu işlerden sonra, kalan boşluklara ekip halinde ve vardiya başından itibaren yerleşir.
       const openJobs = openList.filter(t => t.techWorkMin >= CELL).map(toJob).sort((a, b) => a.units - b.units || a.id - b.id);
       if (openJobs.length) {
-        const alloc = planAllocation(openJobs, grid);
+        const G = crews.map(crew => crewSize(grid, crew));
+        const alloc = lockstepPlan(openJobs, G, crews.map(crew => freeUnits(grid, crew)), 'full').alloc;
         openJobs.forEach(j => {
           const a = alloc.get(j.id);
           let left = a.leftover;
@@ -1846,11 +2032,18 @@ function plan(opts){
           }
         }
 
+        // B1'e tek başına verilen işler, teknisyenlerde çalışılan işlerin onay süresini (her biri için headAlloc) kaplamamalıdır;
+        // onaysız kalan iş teknisyenlerden geri alınır. Bu yüzden B1'in boş zamanından önce onay payı ayrılır.
+        const b1OnlyIds = new Set(b1OnlyCandidates.map(t => t.id));
+        const approvalReserve = tasksCopy.filter(t => !t.isOpen && t.headAlloc > 0 && !b1OnlyIds.has(t.id) && assignedTaskMinutesOnTechnicians(t.id) > 0)
+          .reduce((sum, t) => sum + t.headAlloc, 0);
+        const b1FreeMinutes = () => getFreeIntervals(headObj).reduce((sum, [a, b]) => sum + (b - a), 0);
+
         for (const task of b1OnlyCandidates) {
           const fullB1Duration = Math.max(15, ceil15x(task.techWorkMin + task.headAlloc));
           removeTaskFromTechnicians(task.id);
           b1OnlyTaskIds.add(task.id);
-          const attempt = placeOnTech(headObj, fullB1Duration, task.id, task.name);
+          const attempt = b1FreeMinutes() - fullB1Duration >= approvalReserve ? placeOnTech(headObj, fullB1Duration, task.id, task.name) : null;
           if (attempt) {
             headOverflowAssignments.push({ taskId: task.id, taskName: task.name, start: attempt.start, end: attempt.end, type: 'b1Only' });
           } else {
@@ -2277,13 +2470,124 @@ function plan(opts){
   }
 
   // ============================================================
+  // Ekip dağıtımı (saf hesap)
+  // ------------------------------------------------------------
+  // Her iş ekiplere, parçaları ekip büyüklüğünün katı olacak biçimde verilir (bir ekip işi hücre hücre tüm üyeleriyle yapar).
+  // Katın dışında kalan her birim bir ekip üyesinin yarım hücrede tek başına çalışması demektir; bu yüzden maliyet:
+  //   LS_REM   : katın dışında kalan her artık birim
+  //   LS_SPLIT : işin bir ekipten fazlasına bölünmesi (iş farklı saatlerde biter)
+  //   LS_LEFT  : kapasite yetmediği için yerleşmeyen her birim
+  //   + ekiplerin bitiş süresindeki dengesizlik (iş sonrası en geç biten ekibin uzaması)
+  // İş sırası denenerek toplam maliyeti en düşük dağıtım seçilir. level 'fast' = az sıra denemesi (senaryo önceliklendirmesi).
+  // ============================================================
+  const LS_REM = 2, LS_SPLIT = 4, LS_LEFT = 12;
+  function lockstepPlan(jobs, G, capU, level, b1Free){
+    const m = G.length;
+    const desc = jobs.slice().sort((a, b) => b.units - a.units || a.id - b.id);
+    // Kapasite yetmiyorsa büyük işler önce yerleşir; tümüyle dışarıda kalan (küçük) işleri B1 tek başına yapar. B1'in günü
+    // bu işlere ve diğer işlerin onaylarına yetmiyorsa (b1Free: B1'in boş hücre sayısı) bunun yerine küçük işler önce
+    // yerleşir ve eksik en büyük işin payına düşer (kısmen atanmış iş B1 iş desteğiyle tamamlanır).
+    const total = jobs.reduce((s, j) => s + j.units, 0), cap = capU.reduce((s, c) => s + c, 0);
+    const short = total > cap;
+    let bigFirst = true;
+    if (short && b1Free !== undefined) {
+      let room = cap, assigned = 0, b1Need = 0;
+      desc.forEach(j => { if (room > 0) { assigned++; room -= Math.min(j.units, room); } else b1Need += j.units + 1; });
+      bigFirst = b1Need + assigned <= b1Free;
+    }
+    const orders = short ? [bigFirst ? desc : desc.slice().reverse()] : [desc, desc.slice().reverse()];
+    if (!short && level === 'full' && jobs.length > 2) {
+      let seed = 7 + jobs.length * 13;
+      for (let r = 0; r < 4; r++) {
+        const o = desc.slice();
+        for (let i = o.length - 1; i > 0; i--) {
+          seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
+          const k = seed % (i + 1);
+          [o[i], o[k]] = [o[k], o[i]];
+        }
+        orders.push(o);
+      }
+    }
+    let best = null;
+    orders.forEach(order => {
+      const used = new Array(m).fill(0);
+      const alloc = new Map();
+      let total = 0, span = 0;
+      order.forEach(j => {
+        const room = c => Math.max(0, capU[c] - used[c]);
+        let pick = null;
+        const consider = parts => {
+          const placed = parts.reduce((s, p) => s + p.units, 0);
+          let cost = LS_LEFT * (j.units - placed) + LS_SPLIT * (parts.length - 1);
+          let newSpan = span, load = 0;
+          parts.forEach(p => {
+            cost += LS_REM * (p.units % G[p.c]);
+            const f = (used[p.c] + p.units) / G[p.c];
+            newSpan = Math.max(newSpan, f);
+            load += f;
+          });
+          cost += (newSpan - span) + 0.01 * load;
+          if (!pick || cost < pick.cost - 1e-9) pick = { cost, parts, newSpan };
+        };
+        for (let c = 0; c < m; c++) if (room(c) > 0) consider([{ c, units: Math.min(j.units, room(c)) }]);
+        for (let a = 0; a < m; a++) for (let b = 0; b < m; b++) {
+          if (a === b || room(a) <= 0 || room(b) <= 0) continue;
+          for (let t = 1; t * G[a] < j.units && t * G[a] <= room(a); t++) {
+            const ua = t * G[a];
+            const ub = Math.min(j.units - ua, room(b));
+            if (ub > 0) consider([{ c: a, units: ua }, { c: b, units: ub }]);
+          }
+        }
+        if (!pick) pick = { cost: LS_LEFT * j.units, parts: [], newSpan: span };
+        // İki ekibin boşluğu işe yetmediyse kalan, boşluğu en çok olan diğer ekiplere dağıtılır.
+        let rest = j.units - pick.parts.reduce((s, p) => s + p.units, 0);
+        if (rest > 0) {
+          const inUse = new Set(pick.parts.map(p => p.c));
+          const more = [];
+          for (let c = 0; c < m; c++) if (!inUse.has(c) && room(c) > 0) more.push(c);
+          more.sort((x, y) => room(y) - room(x) || x - y).forEach(c => {
+            const take = Math.min(rest, room(c));
+            if (take <= 0) return;
+            pick.parts.push({ c, units: take });
+            rest -= take;
+          });
+        }
+        pick.parts.forEach(p => {
+          used[p.c] += p.units;
+          span = Math.max(span, used[p.c] / G[p.c]);
+        });
+        total += pick.cost;
+        alloc.set(j.id, { parts: pick.parts, leftover: rest });
+      });
+      if (!best || total < best.total - 1e-9) best = { total, alloc };
+    });
+    return best;
+  }
+
+  // ============================================================
   // Dağıtım senaryoları
   // ------------------------------------------------------------
   // Adam saat dağıtımı birden fazla ekip düzeniyle yapılabiliyorsa her düzen bir senaryodur. Her teknisyen
-  // bir senaryoda tek bir ekipte yer alır. Grup modunda Teknisyen içeren her ekipte en az bir Supervisor bulunur.
-  // Kullanıcı seçmezse hassasiyet çubuğuna göre en uygun senaryo otomatik seçilir.
+  // bir senaryoda tek bir ekipte yer alır ve ekibin müsait üyeleri aynı işi aynı saat aralığında yapar. Önce ekip
+  // büyüklükleri (ör. 7 kişi: 7 | 4+3 | 3+3+1 ...) işlerin süresine uygunluğuna göre sıralanır: işlerin birimleri ekip
+  // büyüklüğünün katıysa ekip içinde kimse yarım hücrelik farklı bir aralıkta çalışmaz. Grup modunda Teknisyen içeren
+  // her ekipte en az bir Supervisor bulunur. Kullanıcı seçmezse hassasiyet çubuğuna göre en uygun senaryo otomatik seçilir.
   // ============================================================
   const MAX_SCENARIOS = 8;
+  const MAX_PATTERNS = 8;
+  const mandatoryUnitJobs = rawTasks.filter(t => !t.isOpen && t.techWorkMin >= 15).map(t => ({ id: t.id, units: Math.floor(t.techWorkMin / 15) }));
+
+  function integerPartitions(n, maxParts){
+    const out = [];
+    const rec = (left, maxPart, cur) => {
+      if (left === 0) { out.push(cur.slice()); return; }
+      if (cur.length >= maxParts) return;
+      for (let p = Math.min(left, maxPart); p >= 1; p--) { cur.push(p); rec(left - p, p, cur); cur.pop(); }
+    };
+    rec(n, n, []);
+    return out;
+  }
+
   function generateCrewSpecs(){
     const n = technicians.length;
     const idx = Array.from({ length: n }, (_, i) => i);
@@ -2299,45 +2603,81 @@ function plan(opts){
       seen.add(key);
       specs.push({ key, crews });
     };
-    const smallest = list => list.reduce((m, c) => (c.length < m.length ? c : m), list[0]);
-    const balanced = m => { const cs = Array.from({ length: m }, () => []); idx.forEach(i => smallest(cs).push(i)); return cs; };
 
-    add([idx]);
-    if (singleTask || n < 2) return specs;
+    add([idx]); // herkes tek ekip: her zaman ilk senaryo
+    const able = idx.filter(i => techFreeCapacities[i] > 0);
+    const idle = idx.filter(i => !(techFreeCapacities[i] > 0)); // günü tamamen dolu olanlar ilk ekibe eklenir
+    if (singleTask || able.length < 2) return specs;
 
-    if (isGroup) {
-      const S = idx.filter(i => roleAt(i) === 'supervisor');
-      const Q = idx.filter(i => roleAt(i) === 'qualified');
-      const R = idx.filter(i => roleAt(i) === 'regular');
-      const lead = k => {
-        const cs = Array.from({ length: k }, () => []);
-        S.forEach((s, i) => cs[i % k].push(s));
-        R.concat(Q).forEach(i => smallest(cs).push(i));
-        return cs;
-      };
-      for (let k = 2; k <= Math.min(S.length, 4); k++) add(lead(k));
-      if (Q.length && S.length + R.length > 0) {
-        for (let g = 1; g <= Math.min(Q.length, 2); g++) {
-          for (let k = 1; k <= Math.min(S.length, 3); k++) {
-            const cs = Array.from({ length: k }, () => []);
-            S.forEach((s, i) => cs[i % k].push(s));
-            R.forEach(r => smallest(cs).push(r));
-            const qs = Array.from({ length: g }, () => []);
-            Q.forEach(q => smallest(qs).push(q));
-            add(cs.concat(qs));
+    // Ekip büyüklüğü düzenleri, işlerin ekip büyüklüğüne uygunluğuna göre sıralanır.
+    const avgCells = Math.max(1, Math.floor(able.reduce((s, i) => s + techFreeCapacities[i], 0) / able.length / 15));
+    const patterns = integerPartitions(able.length, able.length >= 12 ? 5 : 4)
+      .filter(sizes => sizes.length > 1)
+      .map(sizes => ({ sizes, cost: lockstepPlan(mandatoryUnitJobs, sizes, sizes.map(s => s * avgCells), 'fast').total + 3 * (sizes.length - 1) }))
+      .sort((a, b) => a.cost - b.cost || a.sizes.length - b.sizes.length)
+      .slice(0, MAX_PATTERNS);
+
+    // Aynı doluluk düzenindeki teknisyenler yan yana gelsin ki ekibin ortak boş hücreleri çoğalsın.
+    const sig = i => techBusyBlocks[i].map(b => b.start + '-' + b.end).join(',');
+    const byAvail = list => list.slice().sort((a, b) => techFreeCapacities[b] - techFreeCapacities[a] || (sig(a) < sig(b) ? -1 : sig(a) > sig(b) ? 1 : 0) || a - b);
+    const withIdle = crews => { if (idle.length) crews[0] = crews[0].concat(idle); return crews; };
+
+    if (!isGroup) {
+      const order = byAvail(able);
+      patterns.forEach(({ sizes }) => {
+        let at = 0;
+        add(withIdle(sizes.map(s => { const c = order.slice(at, at + s); at += s; return c; })));
+      });
+      return specs;
+    }
+
+    const S = byAvail(able.filter(i => roleAt(i) === 'supervisor'));
+    const R = byAvail(able.filter(i => roleAt(i) === 'regular'));
+    const Q = byAvail(able.filter(i => roleAt(i) === 'qualified'));
+    patterns.forEach(({ sizes }) => {
+      // Rol dağılımları: Teknisyen içeren her ekipte Supervisor bulunmalı; Teknisyen başına Supervisor sayısı yüksek olanlar önce gelir.
+      const combos = [];
+      const rec = (ci, sl, rl, ql, acc) => {
+        if (ci === sizes.length) { if (!sl && !rl && !ql) combos.push(acc.slice()); return; }
+        const size = sizes[ci];
+        for (let s = Math.min(size, sl); s >= 0; s--) {
+          for (let r = Math.min(size - s, rl); r >= 0; r--) {
+            const q = size - s - r;
+            if (q < 0 || q > ql || (r > 0 && s === 0)) continue;
+            const prev = ci > 0 && sizes[ci - 1] === size ? acc[ci - 1] : null;
+            if (prev && (s > prev.s || (s === prev.s && r > prev.r))) continue; // aynı büyüklükteki ekiplerde simetriyi ele
+            acc.push({ s, r, q });
+            rec(ci + 1, sl - s, rl - r, ql - q, acc);
+            acc.pop();
+            if (combos.length > 400) return;
           }
         }
-      }
-      if (!R.length) for (let m = 2; m <= Math.min(n, 4); m++) add(balanced(m));
-    } else {
-      for (let m = 2; m <= Math.min(n, 4); m++) add(balanced(m));
-    }
-    specs.sort((a, b) => a.crews.length - b.crews.length);
-    return specs.slice(0, MAX_SCENARIOS);
+      };
+      rec(0, S.length, R.length, Q.length, []);
+      const quality = combo => combo.reduce((t, x) => t + (x.r > 0 ? (x.r * x.r) / x.s : 0), 0);
+      combos.sort((a, b) => quality(a) - quality(b));
+      combos.slice(0, 2).forEach(combo => {
+        let si = 0, ri = 0, qi = 0;
+        add(withIdle(combo.map(x => {
+          const c = S.slice(si, si + x.s).concat(R.slice(ri, ri + x.r), Q.slice(qi, qi + x.q));
+          si += x.s; ri += x.r; qi += x.q;
+          return c;
+        })));
+      });
+    });
+    return specs;
   }
 
   // Bir senaryonun sonucunu puanlar. Sert ölçütler (atanamayan süre, denetim açığı, erken onay) önce gelir;
-  // yumuşak ölçütler: teknisyen eşitliği (yük dengesi + aynı iş/aynı saat benzerliği) ve B1 onay düzeni.
+  // yumuşak ölçütler:
+  //   ekip içi aynılık : ekibin çalışan üyelerinin her iş parçasını aynı iş ve aynı saat aralığında yapma oranı
+  //   satır oranı      : ekip kartındaki satır başına iş (her iş kartta tek satırsa 1; alt satırlar oranı düşürür)
+  //   az parça         : her teknisyende iş başına tek parça (toplam iş sayısı / toplam parça sayısı)
+  //   teknisyen benzerliği : teknisyenlerin (iş, saat) kümelerinin birbirine benzerliği (az ekip = yüksek)
+  //   B1 onay düzeni   : B1 onay aralıklarının eşitliği
+  //   (yük dengesi sonuçta raporlanır ancak puana katılmaz: ekip içinde herkes aynı süreyi çalışır)
+  // Puan: sol uçta yalnızca teknisyen eşitliği, sağ uçta ağırlıklı B1 onay düzeni (0,7) ve eşitlik (0,3): B1 düzeni birbirine
+  // yakın senaryolar arasında dağınık olanın seçilmesi önlenir.
   function scenarioMetrics(R){
     const asg = new Map();
     const addAsg = (id, m) => asg.set(id, (asg.get(id) || 0) + m);
@@ -2354,6 +2694,31 @@ function plan(opts){
       const budget = Math.max(15, ceil15x(t.techTargetMin + t.headAlloc));
       missing += Math.max(0, budget - (asg.get(t.id) || 0));
     });
+
+    const segsOf = i => R.techObjs[i].segments.filter(s => s.taskId >= 0);
+    let pieces = 0, distinct = 0, shareSum = 0, idleGaps = 0, crewJobs = 0, crewLines = 0;
+    R.spec.crews.forEach(crew => {
+      const active = crew.filter(i => segsOf(i).length);
+      const jobSet = new Set(), lineSet = new Set();
+      active.forEach(i => segsOf(i).forEach(s => { jobSet.add(s.taskId); lineSet.add(s.taskId + '|' + s.start + '|' + s.end); }));
+      crewJobs += jobSet.size; crewLines += lineSet.size;
+      active.forEach(i => {
+        const mine = segsOf(i);
+        pieces += mine.length;
+        distinct += new Set(mine.map(s => s.taskId)).size;
+        mine.forEach(s => {
+          const same = active.filter(j => segsOf(j).some(o => o.taskId === s.taskId && o.start === s.start && o.end === s.end)).length;
+          shareSum += same / active.length;
+        });
+        mine.slice().sort((a, b) => a.start - b.start).forEach((s, k, arr) => {
+          if (k && s.start > arr[k - 1].end && isFreeRange(R.techObjs[i], arr[k - 1].end, s.start)) idleGaps++;
+        });
+      });
+    });
+    const crewShare = pieces ? shareSum / pieces : 1;
+    const compact = pieces ? distinct / pieces : 1;
+    const lineRatio = crewLines ? crewJobs / crewLines : 1;
+    const active = R.techObjs.filter((_, i) => segsOf(i).length).length;
 
     const cells = R.techObjs.map(t => {
       const set = new Set();
@@ -2377,7 +2742,7 @@ function plan(opts){
       pairs++;
     }
     if (pairs) sim = simSum / pairs;
-    const equality = 0.5 * balance + 0.5 * sim;
+    const equality = 0.35 * crewShare + 0.25 * lineRatio + 0.25 * compact + 0.15 * sim;
 
     const ends = R.headObj.segments.filter(s => s.taskId >= 0 && !s.kind).map(s => s.end).sort((a, b) => a - b);
     let regularity = 1;
@@ -2387,14 +2752,22 @@ function plan(opts){
       const sd = Math.sqrt(gaps.reduce((a, g) => a + (g - mean) * (g - mean), 0) / gaps.length);
       regularity = mean > 0 ? Math.max(0, 1 - sd / mean) : 0;
     }
-    const pieces = R.techObjs.reduce((a, t) => a + t.segments.filter(s => s.taskId >= 0).length, 0);
-    return { missing, degraded, gaps: R.supervisionGaps.length, early: R.earlyApprovals.length, equality, regularity, pieces,
-      score: (1 - sens) * equality + sens * regularity };
+    return { missing, degraded, gaps: R.supervisionGaps.length, early: R.earlyApprovals.length, equality, crewShare, lineRatio, compact, sim, balance,
+      regularity, pieces, active, idleGaps, score: (1 - 0.3 * sens) * equality + 0.7 * sens * regularity };
   }
 
   function scenarioSignature(R){
     return R.techObjs.map(t => t.segments.filter(s => s.taskId >= 0).map(s => `${s.taskId}:${s.start}-${s.end}`).join(',')).join('/')
       + '#' + R.headObj.segments.filter(s => s.taskId >= 0).map(s => `${s.taskId}:${s.start}-${s.end}`).join(',');
+  }
+
+  // Önerilen senaryo: puanı en yüksek olanın SCORE_TOL yakınındaki senaryolar arasından en az ekipli olan
+  // (küçük bir kazanç için ekip yapısı bozulmasın). Kullanıcı seçtiyse onun seçimi geçerlidir.
+  const SCORE_TOL = 0.08;
+  function recommend(list){
+    const ranked = list.slice().sort((a, b) => b.metrics.score - a.metrics.score || a.spec.crews.length - b.spec.crews.length || a.id - b.id);
+    return ranked.filter(r => r.metrics.score >= ranked[0].metrics.score - SCORE_TOL)
+      .sort((a, b) => a.spec.crews.length - b.spec.crews.length || b.metrics.score - a.metrics.score || a.id - b.id)[0];
   }
 
   function buildAllScenarios(){
@@ -2414,17 +2787,23 @@ function plan(opts){
       return (!b || m.gaps < b.gaps || (m.gaps === b.gaps && (m.missing < b.missing || (m.missing === b.missing && m.early < b.early)))) ? m : b;
     }, null);
     const usable = out.filter(r => r.metrics.gaps <= best.gaps && r.metrics.missing <= best.missing + 15 && r.metrics.early <= best.early + 1);
-    usable.forEach((r, i) => { r.id = i; });
-    return usable.length ? usable : out;
+    let list = usable.length ? usable : out;
+    list.forEach((r, i) => { r.id = i; });
+    if (list.length > MAX_SCENARIOS) {
+      // Önerilen ve "herkes tek ekip" senaryoları her zaman listede kalır; kalan yerler en yüksek puanlılarla doldurulur.
+      // Liste ekip sayısına göre sıralanır.
+      const keep = new Set([recommend(list), list.find(r => r.spec.crews.length === 1)].filter(Boolean));
+      const rest = list.filter(r => !keep.has(r)).sort((a, b) => b.metrics.score - a.metrics.score || a.id - b.id).slice(0, MAX_SCENARIOS - keep.size);
+      list = [...keep].concat(rest).sort((a, b) => a.spec.crews.length - b.spec.crews.length || b.metrics.score - a.metrics.score || a.id - b.id);
+    } else {
+      list = list.slice().sort((a, b) => a.spec.crews.length - b.spec.crews.length || b.metrics.score - a.metrics.score || a.id - b.id);
+    }
+    list.forEach((r, i) => { r.id = i; });
+    return list;
   }
 
-  // Önerilen senaryo: puanı en yüksek olanın SCORE_TOL yakınındaki senaryolar arasından en az ekipli olan
-  // (küçük bir kazanç için ekip yapısı bozulmasın). Kullanıcı seçtiyse onun seçimi geçerlidir.
-  const SCORE_TOL = 0.05;
   function pickScenario(list, chosenKey){
-    const ranked = list.slice().sort((a, b) => b.metrics.score - a.metrics.score || a.spec.crews.length - b.spec.crews.length || a.id - b.id);
-    const recommended = ranked.filter(r => r.metrics.score >= ranked[0].metrics.score - SCORE_TOL)
-      .sort((a, b) => a.spec.crews.length - b.spec.crews.length || b.metrics.score - a.metrics.score || a.id - b.id)[0];
+    const recommended = recommend(list);
     const manual = list.find(r => r.spec.key === chosenKey);
     return manual ? { picked: manual, auto: false, recommended } : { picked: recommended, auto: true, recommended };
   }
@@ -2441,11 +2820,11 @@ function plan(opts){
       return `<button type="button" class="scn-chip${r === picked ? ' active' : ''}" onclick="selectScenario('${escHtml(r.spec.key)}')" title="${escHtml(crewNames(r.spec.crews))}">
         <span class="scn-title">Senaryo ${i + 1} · ${r.spec.crews.length === 1 ? 'Tek ekip' : r.spec.crews.length + ' ekip'} ${badge}</span>
         <span class="scn-crews">${escHtml(crewNames(r.spec.crews))}</span>
-        <span class="scn-meta">Teknisyen eşitliği %${Math.round(m.equality * 100)} · B1 düzeni %${Math.round(m.regularity * 100)} · ${m.pieces} parça${m.missing ? ` · <span style="color:var(--warning)">${(m.missing / 60).toFixed(2)} sa atanamadı</span>` : ''}</span>
+        <span class="scn-meta">Ekip içi aynılık %${Math.round(m.crewShare * 100)} · ${m.pieces} parça (kişi başı ${(m.active ? m.pieces / m.active : 0).toFixed(1).replace('.', ',')}) · B1 düzeni %${Math.round(m.regularity * 100)}${m.missing ? ` · <span style="color:var(--warning)">${(m.missing / 60).toFixed(2)} sa atanamadı</span>` : ''}</span>
       </button>`;
     }).join('');
     return `<div class="card scn-card"><h2>🎛️ Dağıtım Senaryoları</h2>
-      <div class="small" style="color:var(--muted);margin-bottom:8px">Adam saat dağıtımı birden fazla ekip düzeniyle yapılabiliyor. Her teknisyen bir senaryoda tek bir ekipte yer alır. ${auto ? 'Hassasiyet çubuğuna göre <strong>önerilen senaryo otomatik seçildi</strong>; isterseniz aşağıdan kendiniz seçebilirsiniz.' : 'Senaryoyu <strong>siz seçtiniz</strong>.'}</div>
+      <div class="small" style="color:var(--muted);margin-bottom:8px">Adam saat dağıtımı birden fazla ekip düzeniyle yapılabiliyor. Her teknisyen bir senaryoda tek bir ekipte yer alır ve ekipteki herkes aynı işi aynı saat aralığında yapar; ekip büyüklükleri işlerin süresine göre farklılaşır. ${auto ? 'Hassasiyet çubuğuna göre <strong>önerilen senaryo otomatik seçildi</strong>; isterseniz aşağıdan kendiniz seçebilirsiniz.' : 'Senaryoyu <strong>siz seçtiniz</strong>.'}</div>
       <div class="scn-list">${chips}</div>
       ${auto ? '' : `<button type="button" class="btn scn-auto" onclick="selectScenario('')">↺ Otomatik (önerilen) seçime dön</button>`}
     </div>`;

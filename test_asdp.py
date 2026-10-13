@@ -27,8 +27,8 @@ if needle not in js:
     raise SystemExit('Cannot find final plan render marker for test instrumentation')
 js = js.replace(needle, debug_probe + '    if (view.keepScroll)', 1)
 css = css.replace(css.split('\n')[0], '')  # Skip external font loading in tests.
-html = html.replace('<link rel="stylesheet" href="style.css?v=20261013d"/>', '<style>' + css + '</style>')
-html = html.replace('<script src="script.js?v=20261013d"></script>', '<script>' + js + '</script>')
+html = html.replace('<link rel="stylesheet" href="style.css?v=20261013e"/>', '<style>' + css + '</style>')
+html = html.replace('<script src="script.js?v=20261013e"></script>', '<script>' + js + '</script>')
 mock = """<script>(()=>{const d=new Map();Object.defineProperty(window,'localStorage',{configurable:true,value:{getItem:k=>d.has(k)?d.get(k):null,setItem:(k,v)=>d.set(k,String(v)),removeItem:k=>d.delete(k),clear:()=>d.clear()}})})();</script>"""
 html = html.replace('</head>', mock + '</head>')
 
@@ -297,6 +297,26 @@ with sync_playwright() as p:
     check('Kısa müsait aralığı olan Teknisyen o aralıkta çalıştırılıyor ve denetimli', bool(part_reg) and part_reg[0]['start'] == 0 and part_minutes >= 240 and not unpaired_regular_pieces(part_debug),
           f"ilk parça: {part_reg[0] if part_reg else None}; toplam: {part_minutes} dk; eşleşmeyen: {unpaired_regular_pieces(part_debug)[:3]}")
 
+    # Regresyon: kapasite çok yetersizken B1'e tek başına verilen iş B1'in gününü kaplayıp diğer işlerin onayını engellememeli
+    # (onaysız kalan işin teknisyen çalışması geri alınıyordu). Tek Supervisor'lü 7 kişilik, 40 saatten fazla iş.
+    short_values = {
+        'asdp_tasks': [{'name': n, 'hours': h} for n, h in [('J1', 0.5), ('J2', 16.5), ('J3', 5.5), ('J4', 1.25), ('J5', 6.75), ('J6', 5.75), ('J7', 10.75)]],
+        'asdp_techs': ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'],
+        'asdp_techRoles': ['regular', 'regular', 'regular', 'regular', 'regular', 'supervisor', 'qualified'],
+        'asdp_shiftStart': '10:00', 'asdp_shiftEnd': '17:00', 'asdp_breakStart': '13:00', 'asdp_breakEnd': '13:45',
+        'asdp_teaBreakStart': '14:45', 'asdp_teaBreakEnd': '15:15', 'asdp_planMode': 'group', 'asdp_sensitivity': '25',
+        'asdp_techBlocks': [[], [{'start': '10:30', 'end': '11:30'}], [], [], [], [], []],
+    }
+    short_js = ''.join(f"localStorage.setItem({json.dumps(k)}, {json.dumps(v if isinstance(v, str) else json.dumps(v))});" for k, v in short_values.items())
+    short_page = browser.new_page()
+    short_page.on('pageerror', lambda e: errors.append(str(e)))
+    short_page.set_content(html.replace('</head>', f'<script>{short_js}</script></head>'), wait_until='domcontentloaded', timeout=10000)
+    short_page.locator('#planBtn').click(timeout=5000)
+    short_debug = short_page.evaluate('window.__debugPlan')
+    short_tech_min = sum(seg['end'] - seg['start'] for tech in short_debug['technicians'] for seg in tech['segments'] if seg['taskId'] >= 0)
+    check('Kapasite çok yetersizken B1-only iş onay payını kaplamıyor, teknisyen işleri geri alınmıyor', short_tech_min >= 2000 and short_debug['metrics']['missing'] <= 600,
+          f"teknisyen: {short_tech_min} dk (>= 2000 beklenir); atanamayan: {short_debug['metrics']['missing']} dk")
+
     # Hassasiyet çubuğu, senaryo seçimi ve "her teknisyen tek ekipte" düzeni (yeterli kapasiteli 7 kişilik plan).
     scn_values = {
         'asdp_tasks': [{'name': f'NRC {i + 1}', 'hours': h} for i, h in enumerate([2, 3, 1, 4, 6, 0.5])],
@@ -314,7 +334,16 @@ with sync_playwright() as p:
     scn0 = scn_page.evaluate('window.__debugPlan')
     chip_count = scn_page.locator('#results .scn-chip').count()
     check('Adam saat dağıtımı birden fazla ekip düzeniyle yapılabiliyorsa senaryolar listeleniyor', chip_count >= 2 and len(scn0['scenarios']) == chip_count, f'chip: {chip_count}')
-    check('Hassasiyet solda iken tüm teknisyenler tek ekipte (otomatik öneri)', len(scn0['crews']) == 1 and scn0['auto'], str(scn0['crews']))
+    scn_techs_n = len(scn_values['asdp_techs'])
+    check('Önerilen (otomatik) senaryoda her teknisyen tam olarak bir ekipte', scn0['auto'] and sorted(i for crew in scn0['crews'] for i in crew) == list(range(scn_techs_n)), str(scn0['crews']))
+    check('Hassasiyet solda iken ekip içi aynılık yüksek (aynı grup = aynı iş, aynı saat aralığı)', scn0['metrics']['crewShare'] >= 0.85, f"ekip içi aynılık: {scn0['metrics']['crewShare']:.2f}; ekipler: {scn0['crews']}")
+    check('Her teknisyende iş başına (neredeyse) tek parça', scn0['metrics']['compact'] >= 0.85, f"parça/iş: {scn0['metrics']['compact']:.2f}")
+    unique_crew_lines = []
+    for crew in scn0['crews']:
+        lines = {(s['taskId'], s['start'], s['end']) for i in crew for s in scn0['technicians'][i]['segments'] if s['taskId'] >= 0}
+        jobs = {line[0] for line in lines}
+        unique_crew_lines.append((len(lines), len(jobs)))
+    check('Ekip kartında satır sayısı iş sayısının en fazla 2 katı', all(lines <= 2 * jobs for lines, jobs in unique_crew_lines), str(unique_crew_lines))
 
     def card_names(page):
         return page.evaluate("() => [...document.querySelectorAll('.tech-program-name')].map(e => e.textContent)")

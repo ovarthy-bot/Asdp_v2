@@ -123,6 +123,8 @@ Grup modunda her Teknisyen dakikası aynı işte çalışan bir Supervisor ile k
 
 ### 15. Dağıtım algoritmasının sıfırdan yeniden tasarımı (hassasiyet çubuğu, ekip senaryoları, tek ekip kartı)
 
+> **Not:** Bu maddedeki ekip çekirdeğinin akışı (dağıtım, doğal sıra, hedef bitiş, geriye doğru yerleşim) madde 16'da yeniden yazıldı; hassasiyet çubuğu, senaryo ve tek ekip kartı kavramları geçerlidir.
+
 **İstek:** "B1 Öncelikli" / "Teknisyen Öncelikli" radyo seçimi yerine (a) sol uçta tüm teknisyenlerin neredeyse aynı işleri aynı saat aralıklarında yaptığı, sağ uçta B1 onay aralıklarının düzenli olduğu ve diğer teknisyenlerin buna göre ayarlandığı bir **hassasiyet çubuğu**, (b) adam saat dağıtımı birden fazla düzenle yapılabiliyorsa kullanıcının **senaryo seçebilmesi**, (c) 👷 Teknisyenlerin Programı'nda her teknisyenin **tek bir grupta** görünmesi. Önceki B1, Supervisor, iş süresi sınırı ve süre aşımı kuralları aynen korunacaktı.
 
 **Yeni davranış:**
@@ -157,6 +159,51 @@ Grup modunda her Teknisyen dakikası aynı işte çalışan bir Supervisor ile k
 - Manuel atanan Teknisyeni denetleyen Supervisor, aynı işte boş olan başka bir ekipten gelebilir (yalnızca bu uç durumda bir kişi başka ekibin kartında görünür).
 - `test_asdp.py` yeni arayüze uyarlandı ve yeni kontroller eklendi (çubuk, senaryo listesi, senaryo seçimi, tek kart, çubuk sağda daha düzenli onay, her senaryoda kurallar). Playwright/Chromium düzeneği bu makinede kurulu olmadığından çalıştırılamadı; kontrollerin eşdeğerleri Node düzeneğinde ve uygulama içi tarayıcıda (çubuk, senaryo seçimi, yeniden planlama, konsol hatası yok) doğrulandı. Kullanıma almadan önce `test_asdp.py` yeniden koşturulmalıdır.
 
+### 16. Dağıtımın daha az parçalı ve ekip içinde aynı iş / aynı saat aralıklı kurulması
+
+**İstek:** Teknisyenlere daha az parçalı zaman ayarlanması; tüm teknisyenlerin mümkün olduğunca aynı işlere ve aynı zaman aralıklarına göre ayarlanması. Teknisyenler birden fazla gruba bölünebilir, ancak aynı gruptaki personele aynı iş ve aynı zaman aralıkları verilmelidir.
+
+**Sorun:** Madde 15'teki ekip çekirdeği (a) işleri hücre hücre, her hücrede farklı bir üye alt kümesiyle yerleştiriyordu; küçük işler birkaç kişiye 15 dk'lık dağınık parçalar olarak düşüyor, (b) hedef bitişe göre geriye doğru yerleştirme işleri farklı kişilerde farklı saatlere dağıtıyor, (c) ekip büyüklüğü işin süresine uymadığında (ör. 7 kişilik ekibe 11 birimlik iş) hücrenin yarısı boş ya da başka işle karışık kalıyordu. Supervisor Grup'ta Teknisyen parçası Supervisor parçasıyla birebir aynı aralıkta olmak zorunda olduğundan (madde 14) farklı sınırlı her blok, birbirini denetleyen bütün parçaları da bölüyordu. Rastgele senaryolarda teknisyen başına ortalama 6,5 parça (yalnızca 5,7 farklı iş) ve ekip içi (iş, aralık) örtüşmesi %69 idi.
+
+**Yeni davranış (`script.js`, `lockstepPlan` ve ekip çekirdeği):**
+- **Ekip büyüklüğüne bölünen dağıtım (`lockstepPlan`).** İşlerin birimleri (15 dk × kişi) ekiplere, parçaları ekip büyüklüğünün katı olacak biçimde verilir; ekip tüm üyeleriyle hücre hücre çalışır. Katın dışında kalan artık birim (ör. 4 kişilik ekibe 11 birim = 2 tam hücre + 3 birim) yalnızca ekibin bir kısmına düşer. Maliyet: artık birim sayısı, işin birden çok ekibe bölünmesi, atanamayan birim ve ekip bitiş sürelerinin dengesizliği; birkaç iş sırası denenip en ucuzu seçilir. İşin iki ekibe tam bölünerek verilmesi (ör. 11 = 4×2 + 3×1) otomatik aranır.
+- **Ekip büyüklükleri senaryo olur (`generateCrewSpecs`).** 7 kişi için 7 | 6+1 | 4+3 | 3+3+1 … gibi büyüklük düzenleri, işlerin ekip büyüklüğüne uygunluğuna göre sıralanır; Grup modunda Teknisyen içeren her ekipte Supervisor bulunacak biçimde roller dağıtılır, doluluk düzeni benzeyen kişiler aynı ekibe konur. En iyi büyüklük düzenleri tam plan olarak kurulur (en çok 8 senaryo; "herkes tek ekip" senaryosu her zaman listededir).
+- **Her ekip için en az parçalı yerleşim (`evalLayout`).** Her ekip için dört aday yerleşim kurulur: iki **şerit** (işler ardışık; ardışık iki iş yarım hücre paylaşır; iş sırası biri hücre sınırında bitecek, diğeri kısa iş önce) ve iki **hücre hizalı** dizilim (işin tam hücreleri tüm ekiple; artıklar karma hücrelerde alt takımlarla, hemen öncesinde ya da arasında). Adaylar, ekip kartının gerçek parça sayısı (Grup modunda `alignSupervisionPieces` bölmeleri dahil) + farklı (iş, aralık) satır sayısı + işler arasındaki boşta kalma ile ölçülür, en küçüğü seçilir. Kapasite dar olup hiçbiri eksiksiz yerleşemiyorsa en sıkı yerleşen şerit kullanılır.
+- **Hassasiyet çubuğu.** Sol uçta öteleme yoktur (işler arasında boşluk kalmaz). Bitişi B1 hedefine kaydırmak için işin başlangıcı parçalanmadan ötelenir (araya boş aralık girer); yaklaşma oranı çubuğun **karesidir**, böylece çubuğun sol yarısında neredeyse boşluk oluşmaz (doğrusal oranda çubuk 25'te bile boşluk/teknisyen 0,09 → 0,46 oluyordu), sağ uçta tam eşit aralık hedeflenir. Senaryo puanı: `(1 − 0,3h)·eşitlik + 0,7h·B1 düzeni`; eşitlik = 0,35·ekip içi aynılık + 0,25·satır oranı (iş sayısı / satır sayısı) + 0,25·az parça + 0,15·teknisyen benzerliği. Önerilen senaryo, en yüksek puandan 0,08 içindekiler arasında en az ekipli olandır.
+- **B1-only işler onay payını kaplamaz.** Kapasite çok yetersizken bir işin tamamı B1'e verilirse B1'in tüm günü bu işe gidebiliyor, diğer işlerin onayına zaman kalmıyor ve onaysız kalan işlerin teknisyen çalışması geri alınıyordu (7 kişi, tek Supervisor, 47 sa iş: teknisyenlerde hiç iş kalmıyordu). Artık B1'e tek başına verilen işlere yerleştirmeden önce, teknisyenlerde çalışılan işlerin onay süresi (iş başına `headAlloc`) ayrılır. Kapasite yetmediğinde büyük işler önce yerleşir ve dışarıda kalan küçük işleri B1 yapar; B1'in günü bunlara ve onaylara yetmeyecekse küçük işler önce yerleşir, eksik en büyük işin payına düşer.
+- **Değişmeyenler.** Çekirdekten sonraki tüm hat (B1-only, kalan işi B1'e verme, B1 onay planı ve yer değiştirme onarımı, OPEN dolgu, B1 kuralıyla geri alma, kesin denetim kuralı, `alignSupervisionPieces`), çekirdeğin işe `techWorkMin` bütçesinden fazla süre vermemesi, tek iş kartında eşit paylaşım, manuel atamalar ve dolu saatler aynen çalışır. Arayüz: çubuk açıklamaları, senaryo kartı özeti (ekip içi aynılık, parça sayısı ve kişi başı parça, B1 düzeni).
+
+**Ölçüm** (uygulamanın `plan()` fonksiyonu sahte bir DOM ile Node içinde çalıştırıldı; eski ve yeni kod aynı girdilerle):
+
+| | Eski (madde 15) | Yeni |
+|---|---|---|
+| **Tipik yük** (600 senaryo: 4–9 kişi, 3–8 iş, kapasitenin %30–90'ı, çubuk 0/25/50, mola ve dolu saat bazılarında) | | |
+| Teknisyen başına parça | 6,5 | **4,5** |
+| Fazladan parça (parça − farklı iş), teknisyen başına | 0,86 | **0,09** |
+| Ekip içi aynılık (aynı iş + aynı aralık) | %69 | **%86** |
+| Ekip kartında iş başına satır | 2,0 | **1,3** |
+| İşler arasında boşta kalma, teknisyen başına | 0,48 | **0,27** |
+| Atanamayan süre / erken kalan B1 onayı | 0 / 0 | 0 / 0 |
+| Ekip sayısı (önerilen senaryo) | 1 | 1,9 |
+| **Uç ve karışık girdiler** (2000 senaryo: 1–10 kişi, 1–8 iş, mola, dolu saat, manuel atama, OPEN, 0 saatlik iş, tamamı OPEN, B1 dolu saati, kapasite açığı) | | |
+| Kural ihlali (çakışma, vardiya dışı, denetimsiz Teknisyen, birebir olmayan parça, iş tahmini aşımı, denetim açığı) | 0 | **0** |
+| Teknisyen başına parça / fazladan parça | 4,61 / 1,14 | **3,50 / 0,38** |
+| Ekip içi aynılık | %72 | **%87** |
+| Ortalama atanamayan süre | 177 dk | 168 dk |
+| B1 onayı işin bitişinden önce kalan senaryo | 27 | 25 |
+
+- Çubuk taraması (150 senaryo/değer, tipik yük): çubuk 0 → 100 giderken B1 onay düzeni 0,50 → 0,76, teknisyen başına boşluk 0,09 → 0,69 ve parça 4,25 → 4,78 olur; yani sağa gittikçe B1 düzeni artar, buna karşılık araya boşluk girer ve iş biraz daha bölünür.
+- Kullanıcının 7 kişilik NRC 1–6 planında (12:45–19:45) 6 kişi aynı üç işi aynı saatlerde yapar (NRC 1 12:45–13:00, NRC 3 13:00–14:45, NRC 4 14:45–19:45), Kalifiyeli kişi ayrı bir ekipte kendi sırasıyla çalışır; yerleşen toplam süre 44 sa, atanamayan 1 sa (eski sürümle aynı). Yeterli kapasiteli 7 kişilik örnekte (2 Supervisor, 4 Teknisyen, 1 Kalifiyeli; 6 iş) öneri iki ekiptir: her ekip kartında 3–6 satır, ekip içi aynılık %94 (tek ekipte 9 satır, %67).
+- Hesap süresi (tüm senaryolar birlikte, Node): 7 kişi + 6 iş yaklaşık 30–50 ms, 15 kişi + 12 iş yaklaşık 130 ms, 25 kişi + 20 iş yaklaşık 400 ms (eski çekirdek yaklaşık 4–10 ms).
+- Gerçek tarayıcıda (uygulama içi tarayıcı) plan oluşturma, senaryo kartı seçme, otomatik seçime dönme ve çubuğu değiştirip yeniden planlama denendi; konsol hatası yok.
+
+**Bilinen sınır / bedel:**
+- Önerilen senaryo çoğunlukla 2 ekiptir (tipik yükte ortalama 1,9). İşlerin süresi tek ekibe tam bölünmediğinde tek büyük ekip 2–3 alt satırlı, dağınık bir kart üretir (ekip içi aynılık yaklaşık %67–70); ekibi bölmek bu satırları ortadan kaldırır. "Herkes tek ekip" senaryosu her zaman listededir ve kartından seçilebilir.
+- Tek Supervisor'lü, Teknisyen ağırlıklı ekiplerde artık (yarım hücre) bir hücrede yalnızca Supervisor çalışabildiği için Teknisyenler o hücrede boşta kalır; kapasitenin sıkı olduğu senaryolarda atanamayan süre eski sürümden en çok 15–45 dk (1–3 birim) yüksek çıkabilir (rastgele aşırı yüklü senaryoların yaklaşık %3'ü); buna karşılık eski sürümde B1'in tüm gününü kaplayan büyük iş sorunu (B1-only) giderildi.
+- Çubuğun sağ yarısında B1 düzeni için işlerin arasına boş aralık girer; bu, "az parçalı zaman" ile çelişen bilinçli bir takastır (çubuğun sol yarısı boşluksuzdur).
+- Ekip sayısı en çok 4 (12 ve üzeri kişide 5) ve toplam senaryo sayısı en çok 8 ile sınırlıdır.
+- `test_asdp.py` güncellendi (ekip içi aynılık, tek ekip bölümlemesi, satır sayısı ve B1-only onay payı kontrolleri; toplam 41 kontrol). Playwright/Chromium bu makinede kurulu olmadığından çalıştırılamadı; kontrollerin eşdeğerleri Node düzeneğinde (14/14) ve uygulama içi tarayıcıda doğrulandı. Kullanıma almadan önce `test_asdp.py` yeniden koşturulmalıdır.
+
 ## Korunan özellikler
 
 - Supervisor ALL ve Supervisor Grup çalışma modları.
@@ -186,6 +233,8 @@ Son koşuda **17/17 kontrol başarılı**, `node --check script.js` başarılıd
 **B1 iş desteği değişikliği (madde 12):** `test_asdp.py`'ye 3 kontrol eklendi (toplam 20): kapasite israf edilmiyor (44 sa yerleşiyor, NRC 1'den yalnızca 1,00 sa atanamıyor), B1 iş desteği listede ayrı görünüyor ve B1 onayı işin son çalışma saatinden önce kalmıyor (madde 13). Bu kontrollerin eşdeğeri jsdom ile doğrulandı; Playwright/Chromium düzeneği bu değişiklik sırasında çalıştırılamadı, kullanıma almadan önce `test_asdp.py` yeniden koşturulmalıdır. Ek olarak eski ve yeni kod, rastgele üretilen senaryolarda (2–9 personel, 1–8 iş, her iki mod/algoritma, mola, dolu saat, manuel atama, OPEN iş) karşılaştırıldı (3000 senaryo): yeni kod çakışma veya denetimsiz Teknisyen çalışması üretmedi ve hiç çökmedi. Zorunlu işlerde yerleşen süre 2999 senaryoda eşit ya da daha fazlaydı; yalnızca bir aşırı yüklü senaryoda (B1'de 4 boş dilim) 15 dk daha az yerleşti. Bir senaryoda `tech_priority`'nin önceden var olan fazla atama sorunu (+15 dk), iş artık B1 kuralıyla düşmediği için görünür oldu.
 
 **Birebir eşleşme değişikliği (madde 14):** `test_asdp.py`'ye 4 kontrol eklendi (toplam 24): 7 kişilik NRC planında ve dolu saatli planda her Teknisyen parçasının Supervisor ile birebir aynı aralıkta olması, bölme adımının bloğu doğru sınırdan bölüp birebir olana dokunmaması ve dolu saati yaklaşan Teknisyenin kısa müsait aralığının boş kalmaması. Bu değişiklik sırasında da Playwright/Chromium düzeneği çalıştırılamadı; bu nedenle mantık, uygulamanın `plan()` fonksiyonunu sahte bir DOM ile Node içinde çalıştıran bir düzenekle (9000 rastgele senaryo, her iki algoritma, sade/zengin/uç senaryolar; kural ihlali, çakışma, vardiya dışı çalışma, denetimsiz Teknisyen ve tahmin aşımı kontrolleriyle), `alignSupervisionPieces` için 2715 geçerli rastgele plan üzerinde özellik testiyle (süre/yük değişmez, bölünen parçalar çakışmaz, her Teknisyen parçasının birebir eşi vardır, zaten birebir olan plana dokunulmaz) ve gerçek tarayıcıda (uygulama arayüzünden plan oluşturma, konsol hatası yok) doğrulandı. Mevcut kontrollerin denk karşılıkları da yeni kodla geçti. Kullanıma almadan önce `test_asdp.py` yeniden koşturulmalıdır.
+
+**Ekip içi aynılık değişikliği (madde 16):** `test_asdp.py`'de önerilen senaryo kontrolü güncellendi (tek ekip beklentisi yerine her teknisyenin tam bir ekipte olması, ekip içi aynılık ≥ %85, iş başına tek parça ≥ %85, ekip kartında satır sayısı ≤ iş sayısının 2 katı) ve kapasite çok yetersizken B1-only işin onay payını kaplamadığı kontrolü eklendi (toplam 41 kontrol). Playwright/Chromium düzeneği bu değişiklik sırasında da çalıştırılamadı; mantık, uygulamanın `plan()` fonksiyonunu sahte bir DOM ile Node içinde çalıştıran düzenekte doğrulandı: 14 kontrol (kullanıcının 7 kişilik NRC planı üç çubuk değerinde, dolu saatli plan, kısa müsait aralıklı Teknisyen, her senaryonun tek tek seçilmesi) 14/14 geçti; 2000 + 600 rastgele senaryoda (mola, dolu saat, manuel atama, OPEN, 0 saatlik iş, tek kişi, B1 dolu saati, kapasite açığı) çakışma, vardiya dışı çalışma, denetimsiz Teknisyen, birebir olmayan Teknisyen parçası, iş tahmini aşımı ve denetim açığı üretilmedi, çökme olmadı. Kullanıma almadan önce `test_asdp.py` yeniden koşturulmalıdır.
 
 **Önceden var olan, bu değişiklikle ilgisiz bulgu:** Teknisyen Öncelikli yöntemde bazı senaryolarda bir işin toplamı (Teknisyenler + B1 onayı) girilen tahmini 15 dk aşabiliyor (ör. 5 kişi: 3 Kalifiyeli, 1 Supervisor, 1 Teknisyen; 5 sa ve 7 sa'lık iki iş; 08:00-16:00; 7 sa'lık iş 435 dk planlanıyor). Eski sürümde de aynı sayıda görülüyor; ayrıca ele alınmalıdır.
 
