@@ -26,9 +26,10 @@ let headBlocks = load('asdp_headBlocks', [{start: '', end: ''}]);
 let techBlocks = load('asdp_techBlocks', []);
 let programNote = localStorage.getItem('asdp_programNote') || '';
 let planMode = localStorage.getItem('asdp_planMode') || 'all';
-let algoMode = localStorage.getItem('asdp_algoMode') || 'b1_priority';
+// Hassasiyet çubuğu (0-100): 0 = teknisyenler aynı işi aynı saatlerde yapar, 100 = B1 onayları düzenli aralıklarda.
+let sensitivity = (() => { const v = parseInt(localStorage.getItem('asdp_sensitivity'), 10); return Number.isFinite(v) ? Math.min(100, Math.max(0, v)) : 50; })();
+let chosenScenario = ''; // Kullanıcının seçtiği senaryo anahtarı; '' = hassasiyete göre otomatik
 let techPreAssignments = load('asdp_techPreAssigns', []);
-if (algoMode === 'tech_priority') planMode = 'group'; // Teknisyen Öncelikli yöntemde Grup modu zorunlu
 
 const tasksDiv = $('tasks'), techsDiv = $('techs'), headBlocksDiv = $('headBlocks'), techBlocksDiv = $('techBlocks'), resultsDiv = $('results');
 const tasksStatDiv = $('tasksStat'), techsStatDiv = $('techsStat'), dupeWarnDiv = $('dupeWarn');
@@ -54,19 +55,9 @@ function normalizeTechRoles(){
 function applyModeUI(){
   document.body.classList.toggle('mode-all', planMode === 'all');
   document.body.classList.toggle('mode-group', planMode === 'group');
-  const groupLocked = (algoMode === 'tech_priority');
-  document.querySelectorAll('input[name="planMode"]').forEach(r => {
-    r.checked = (r.value === planMode);
-    r.disabled = groupLocked && r.value === 'all';
-  });
-  document.querySelectorAll('#modeRow label').forEach(l => {
-    const locked = groupLocked && l.dataset.mode === 'all';
-    l.style.opacity = locked ? '0.45' : '';
-    l.style.cursor = locked ? 'not-allowed' : '';
-    l.title = locked ? 'Teknisyen Öncelikli yöntemde Supervisor Grup modu zorunludur' : '';
-  });
+  document.querySelectorAll('input[name="planMode"]').forEach(r => { r.checked = (r.value === planMode); });
   document.querySelectorAll('#modeRow label').forEach(l => l.classList.toggle('active', l.dataset.mode === planMode));
-  $('modeSummaryNote').textContent = (planMode === 'all') ? 'Mevcut: Supervisor ALL' : (groupLocked ? 'Mevcut: Supervisor Grup (zorunlu)' : 'Mevcut: Supervisor Grup');
+  $('modeSummaryNote').textContent = (planMode === 'all') ? 'Mevcut: Supervisor ALL' : 'Mevcut: Supervisor Grup';
   const desc = $('modeDescription');
   if (planMode === 'all') {
     desc.innerHTML = 'Klasik mod: tek B1 teknisyen her işin bitişinde 15 dk onay süresi alır. Onay aralıkları mümkün olduğunca birbirine yığılmadan planlanır.';
@@ -79,15 +70,30 @@ function applyModeUI(){
   }
 }
 
+// Hassasiyet çubuğunun yazıya çevrilmiş hâli (özet satırı, sonuç başlığı ve yapay zeka verisi için).
+function sensitivityText(){
+  const v = sensitivity;
+  const tag = v <= 20 ? 'teknisyen eşitliği' : v >= 80 ? 'B1 düzeni' : v === 50 ? 'dengeli' : v < 50 ? 'eşitliğe yakın' : 'B1 düzenine yakın';
+  return `%${v} (${tag})`;
+}
+
 function applyAlgoUI(){
-  document.querySelectorAll('input[name="algoMode"]').forEach(r => r.checked = (r.value === algoMode));
-  document.querySelectorAll('#algoRow label').forEach(l => l.classList.toggle('active', l.dataset.algo === algoMode));
+  const slider = $('sensitivity');
+  if (slider) slider.value = sensitivity;
+  const valueEl = $('sensitivityValue');
+  if (valueEl) valueEl.textContent = sensitivityText();
   const algoNote = $('algoSummaryNote');
-  if (algoNote) algoNote.textContent = (algoMode === 'b1_priority') ? 'Mevcut: B1 Öncelikli' : 'Mevcut: Teknisyen Öncelikli';
+  if (algoNote) algoNote.textContent = 'Hassasiyet: ' + sensitivityText();
   const algoDesc = $('algoDescription');
-  if (algoDesc) algoDesc.innerHTML = (algoMode === 'b1_priority')
-    ? 'Her iş, süresine göre tüm teknisyenlere küçük parçalar halinde paylaştırılır ve teknisyenlerin toplam yükü eşitlenir. Tek iş kartı varsa iş tüm personele eşit paylaştırılır.'
-    : "Her iş <strong>aynı saatte birlikte çalışan 2'li veya 3'lü ekiplere</strong> verilir (3 saat ve üzeri işlerde önce 3'lü, diğerlerinde önce 2'li ekip denenir; kişi başı pay en az 30 dk). Teknisyen yalnızca Supervisor'lü bir ekipte (veya aynı işte Supervisor çalışırken) iş alır; Kalifiyeli denetim yapamaz. Ekip kurulamazsa iş tek kişiye verilir (son tercih). Tek iş kartı varsa ekip kuralı yerine iş tüm personele eşit paylaştırılır. <strong>Bu yöntemde Supervisor Grup modu zorunludur.</strong>";
+  if (algoDesc) {
+    const now = sensitivity <= 20
+      ? 'Şu an: tüm teknisyenler neredeyse aynı işleri aynı saat aralıklarında yapar; B1 onayları işlerin doğal bitişine göre dağılır ve düzenli olmayabilir.'
+      : sensitivity >= 80
+        ? "Şu an: B1 onayları eşit aralıklara oturtulur; diğer teknisyenlerin işleri ve saat aralıkları B1'in bu düzenine göre ayarlanır (iş parçaları daha bölünmüş olabilir)."
+        : 'Şu an: ikisi arasında bir denge kurulur; işlerin bitişleri doğal sıradan B1 düzenine doğru kısmen kaydırılır.';
+    algoDesc.innerHTML = `<strong>Sol:</strong> tüm teknisyenler birbirinin neredeyse aynı işlerini aynı saat aralıklarında yapar, B1 onayları düzensiz olabilir. <strong>Sağ:</strong> B1 teknisyenin onay aralıkları düzenli olur, diğer teknisyenlerin iş ve saatleri B1'e göre ayarlanır.<br>` +
+      `Her teknisyen programda <strong>tek bir ekipte (grupta)</strong> yer alır. Adam saat dağıtımı birden fazla ekip düzeniyle yapılabiliyorsa plan oluşturulduktan sonra senaryolardan birini kendiniz seçebilirsiniz. Her iki uçta da Supervisor denetimi, B1 onayı ve iş süresi sınırları aynen korunur.<br>${now}`;
+  }
 }
 
 function updateShiftSummary(){
@@ -391,9 +397,9 @@ updateBusySummary();
 
 // ---- Buttons ----
 $('addTask').addEventListener('click', ()=>{ tasks.push({ name:`NRC ${tasks.length+1}`, hours:1.0, open:false }); renderTasks(); });
-$('addTech').addEventListener('click', ()=>{ technicians.push(`Teknisyen ${technicians.length+1}`); techBlocks.push([]); normalizeTechPreAssignments(); techRoles.push('regular'); renderTechs(); renderTechBlocks(); });
+$('addTech').addEventListener('click', ()=>{ chosenScenario = ''; technicians.push(`Teknisyen ${technicians.length+1}`); techBlocks.push([]); normalizeTechPreAssignments(); techRoles.push('regular'); renderTechs(); renderTechBlocks(); });
 $('resetTasks').addEventListener('click', ()=>{ if(confirm('Tüm işleri sıfırlamak?')){ tasks=[]; techPreAssignments=[]; renderTasks(); }});
-$('resetTechs').addEventListener('click', ()=>{ if(confirm('Tüm teknisyenleri sıfırlamak?')){ technicians=[]; techBlocks=[]; techRoles=[]; techPreAssignments=[]; renderTechs(); renderTechBlocks(); }});
+$('resetTechs').addEventListener('click', ()=>{ if(confirm('Tüm teknisyenleri sıfırlamak?')){ chosenScenario = ''; technicians=[]; techBlocks=[]; techRoles=[]; techPreAssignments=[]; renderTechs(); renderTechBlocks(); }});
 $('clearBreak').addEventListener('click', ()=>{ $('breakStart').value=''; $('breakEnd').value=''; breakStart=''; breakEnd=''; localStorage.removeItem('asdp_breakStart'); localStorage.removeItem('asdp_breakEnd'); updateShiftSummary(); updateTechsStat(); });
 if ($('clearTeaBreak')) $('clearTeaBreak').addEventListener('click', ()=>{ $('teaBreakStart').value=''; $('teaBreakEnd').value=''; teaBreakStart=''; teaBreakEnd=''; localStorage.removeItem('asdp_teaBreakStart'); localStorage.removeItem('asdp_teaBreakEnd'); updateShiftSummary(); updateTechsStat(); });
 $('addHeadBlock').addEventListener('click', ()=>{ headBlocks.push({start:'', end:''}); renderHeadBlocks(); });
@@ -433,18 +439,18 @@ document.querySelectorAll('input[name="planMode"]').forEach(r => r.addEventListe
   updateTechsStat();
 }));
 
-document.querySelectorAll('input[name="algoMode"]').forEach(r => r.addEventListener('change', e => {
-  algoMode = e.target.value;
-  localStorage.setItem('asdp_algoMode', algoMode);
-  // Teknisyen Öncelikli yöntem Supervisor Grup modu ile çalışır.
-  if (algoMode === 'tech_priority' && planMode !== 'group') {
-    planMode = 'group';
-    localStorage.setItem('asdp_planMode', planMode);
-    updateTechsStat();
-  }
-  applyModeUI();
-  applyAlgoUI();
-}));
+const sensitivityInput = $('sensitivity');
+if (sensitivityInput) {
+  sensitivityInput.addEventListener('input', e => {
+    sensitivity = Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0));
+    localStorage.setItem('asdp_sensitivity', String(sensitivity));
+    applyAlgoUI();
+  });
+  // Çubuk bırakıldığında bir plan zaten gösteriliyorsa yeni hassasiyetle yeniden planlanır.
+  sensitivityInput.addEventListener('change', () => {
+    if (typeof window._asdpShowPlan === 'function') { savePlanInputs(); plan({ keepScroll: true }); }
+  });
+}
 
 mainContainer.addEventListener('input', e => {
   const i = +e.target.dataset.i;
@@ -521,6 +527,7 @@ mainContainer.addEventListener('change', e => {
   }
   if (f === 'techRole' && Number.isFinite(i)) {
     normalizeTechRoles();
+    chosenScenario = '';
     techRoles[i] = e.target.value;
     save('asdp_techRoles', techRoles);
     updateTechsStat();
@@ -544,6 +551,7 @@ mainContainer.addEventListener('click', e => {
   const delTech = e.target.closest('[data-deltech]');
   if(delTech){
     const idx = +delTech.dataset.deltech;
+    chosenScenario = '';
     technicians.splice(idx,1);
     techBlocks.splice(idx,1);
     if (Array.isArray(techPreAssignments)) techPreAssignments.splice(idx,1);
@@ -774,45 +782,6 @@ function attributeSupervision(segStart, segEnd, techObjs, roles, technicians, ta
 // ============================================================
 // Smart placement helpers (group mode)
 // ============================================================
-function placeSupervisorSmart(sup, duration, taskId, taskName, techObjs, roles){
-  const cov = buildSupervisorCoverage(techObjs, roles, taskId);
-
-  for (let i = 0; i < techObjs.length; i++) {
-    if (roles[i] !== 'regular') continue;
-    const t = techObjs[i];
-    for (const seg of t.segments) {
-      if (seg.taskId !== taskId) continue;
-      const gaps = findGaps(seg.start, seg.end, cov);
-      for (const [gs, ge] of gaps) {
-        const useDur = Math.min(duration, floor15(ge - gs));
-        if (useDur < 15) continue;
-        if (isFreeRange(sup, gs, gs + useDur)) {
-          sup.segments.push({ start: gs, end: gs + useDur, taskId, taskName });
-          sup.totalMin += useDur;
-          return { start: gs, end: gs + useDur };
-        }
-      }
-    }
-  }
-
-  const free = getFreeIntervals(sup);
-  for (const [fs, fe] of free) {
-    if (fe - fs < duration) continue;
-    let cursor = fs;
-    while (cursor + duration <= fe) {
-      const ovl = cov.find(([cs, ce]) => cursor < ce && cursor + duration > cs);
-      if (!ovl) {
-        sup.segments.push({ start: cursor, end: cursor + duration, taskId, taskName });
-        sup.totalMin += duration;
-        return { start: cursor, end: cursor + duration };
-      }
-      cursor = Math.max(cursor + 15, ovl[1]);
-    }
-  }
-
-  return placeOnTech(sup, duration, taskId, taskName);
-}
-
 function repairCoverage(techObjs, roles){
   for (let iter = 0; iter < 300; iter++) {
     let target = null;
@@ -966,49 +935,10 @@ function alignSupervisionPieces(techObjs, roles){
   });
 }
 
-function ensureNoIdleTech(techObjs, roles, isGroup){
-  for (let iter = 0; iter < 200; iter++) {
-    const idle = techObjs.find(t => t.totalMin === 0 && t.freeCapacity >= 15);
-    if (!idle) return;
-
-    const loaded = techObjs.slice().sort((a, b) => b.totalMin - a.totalMin);
-    let donor = null;
-    for (const cand of loaded) {
-      if (cand === idle) continue;
-      if (cand.totalMin < 30) break;
-      donor = cand;
-      break;
-    }
-    if (!donor) return;
-
-    const moveSize = 15;
-    const seg = donor.segments
-      .filter(s => s.taskId !== -1 && !s.locked && (s.end - s.start) >= 30)
-      .sort((a, b) => (a.end - a.start) - (b.end - b.start))
-      .find(s => !(isGroup && shrinkBreaksSupervision(techObjs, roles, donor, s, s.end - moveSize)));
-    if (!seg) return;
-
-    // Önce donörün parçası kısaltılır ki Teknisyen, devredilen Supervisor süresine güvenerek yerleşmesin.
-    seg.end -= moveSize;
-    let result;
-    if (isGroup && roles[idle.index] === 'regular') {
-      const cov = buildSupervisorCoverage(techObjs, roles, seg.taskId);
-      // Teknisyen yalnızca aynı işte Supervisor çalışırken iş alabilir; denetimsiz yere yerleştirme yapılmaz.
-      result = placeOnTech(idle, moveSize, seg.taskId, seg.taskName, { coverage: cov });
-    } else {
-      result = placeOnTech(idle, moveSize, seg.taskId, seg.taskName);
-    }
-    if (!result) { seg.end += moveSize; return; }
-
-    if (seg.end <= seg.start) donor.segments = donor.segments.filter(s => s !== seg);
-    donor.totalMin -= moveSize;
-  }
-}
-
 // ============================================================
 // Plan
 // ============================================================
-$('planBtn').addEventListener('click', ()=>{
+function savePlanInputs(){
   save('asdp_tasks', tasks);
   save('asdp_techs', technicians);
   save('asdp_techRoles', techRoles);
@@ -1022,10 +952,23 @@ $('planBtn').addEventListener('click', ()=>{
   save('asdp_headBlocks', headBlocks);
   save('asdp_techBlocks', techBlocks);
   save('asdp_techPreAssigns', techPreAssignments);
+}
+
+$('planBtn').addEventListener('click', ()=>{
+  savePlanInputs();
   plan();
 });
 
-function plan(){
+// Senaryo seçimi: sonuç yeniden hesaplanmaz, hesaplanmış senaryolardan biri gösterilir. '' = otomatik (önerilen).
+window.selectScenario = function(key) {
+  chosenScenario = key || '';
+  if (typeof window._asdpShowPlan === 'function') window._asdpShowPlan({ keepScroll: true });
+};
+
+function plan(opts){
+  opts = opts || {};
+  const startScrollY = window.scrollY; // sonuç alanı temizlenmeden önceki kaydırma konumu
+  window._asdpShowPlan = null;
   resultsDiv.innerHTML = '';
 
   const dupes = checkDuplicateTaskNames();
@@ -1122,11 +1065,6 @@ function plan(){
   if(_workEnd_offset <= 0) { resultsDiv.innerHTML = `<div class="warning">Vardiya çok kısa / mola çok uzun - plan yapılamıyor.</div>`; return; }
 
   const HEAD_MIN = 15;
-  if (algoMode === 'tech_priority' && planMode !== 'group') {
-    planMode = 'group';
-    localStorage.setItem('asdp_planMode', planMode);
-    applyModeUI();
-  }
   const isGroup = (planMode === 'group');
 
   function normalizeWorkBlocks(blocks) {
@@ -1244,1622 +1182,1685 @@ function plan(){
   const mandatoryAfterRound = rawTasks.filter(t => !t.isOpen).reduce((sum, t) => sum + t.techWorkMin, 0);
   capacityExceeded = mandatoryAfterRound > totalCapacityMin;
 
-  const techObjs = technicians.map((name, index) => ({
-    name, index,
-    role: isGroup ? (techRoles[index] || 'regular') : 'all',
-    segments: [], totalMin: 0,
-    busyMin: (techBusyMinutes[index] || 0) + (techPreAssignMinutes[index] || 0),
-    freeCapacity: techFreeCapacities[index] || 0
-  }));
-  techBusyBlocks.forEach((blocks, techIndex) => {
-    const tech = techObjs[techIndex];
-    if (!tech) return;
-    blocks.forEach(block => tech.segments.push({ start: block.start, end: block.end, taskId: -1, taskName: 'DOLU' }));
-  });
-
-  validPreAssigns.forEach((assigns, techIndex) => {
-    const tech = techObjs[techIndex];
-    if (!tech) return;
-    assigns.forEach(assign => {
-       const taskName = rawTasks[assign.taskId] ? rawTasks[assign.taskId].name : 'İş';
-       tech.segments.push({ start: assign.start, end: assign.end, taskId: assign.taskId, taskName: taskName, locked: true });
-       tech.totalMin += (assign.end - assign.start);
-    });
-  });
-
-  let tasksCopy = rawTasks.slice();
-  const taskSegments = new Map();
-  tasksCopy.forEach(t => taskSegments.set(t.id, []));
-  const unallocated = [];
-
   // Süresi olan tek bir iş kartı varsa iş tüm personele eşit paylaştırılır (scheduleSingleTaskEqually);
-  // eşitliği bozacak dengeleme, uzatma ve ekip adımları bu durumda atlanır.
+  // eşitliği bozacak ekip bölümü ve hedef bitiş kaydırması bu durumda uygulanmaz.
   const activeTasks = rawTasks.filter(t => t.rawMin > 0);
   const singleTask = activeTasks.length === 1 ? activeTasks[0] : null;
-  let equalShare = null;
+  const sens = Math.min(1, Math.max(0, (Number(sensitivity) || 0) / 100)); // hassasiyet çubuğu, 0..1
 
-  tasksCopy.sort((a, b) => b.techWorkMin - a.techWorkMin);
-
-  function pickCandidates(){
-    return techObjs.slice().sort((a, b) => {
-      if (a.totalMin !== b.totalMin) return a.totalMin - b.totalMin;
-      if ((b.freeCapacity || 0) !== (a.freeCapacity || 0)) return (b.freeCapacity || 0) - (a.freeCapacity || 0);
-      return a.index - b.index;
+  // Bir senaryo (ekip düzeni) için tüm planı kurar: dağıtım, B1 onayları, denetim kuralı ve birebir eşleştirme.
+  // Girdiler ve kapasite hesabı senaryodan bağımsızdır; senaryoya özgü her şey burada yeniden oluşturulur.
+  function buildScenario(spec){
+    const crews = spec.crews;
+    const scenarioWarnings = preAssignWarnings.slice();
+    const techObjs = technicians.map((name, index) => ({
+      name, index,
+      role: isGroup ? (techRoles[index] || 'regular') : 'all',
+      segments: [], totalMin: 0,
+      busyMin: (techBusyMinutes[index] || 0) + (techPreAssignMinutes[index] || 0),
+      freeCapacity: techFreeCapacities[index] || 0
+    }));
+    techBusyBlocks.forEach((blocks, techIndex) => {
+      const tech = techObjs[techIndex];
+      if (!tech) return;
+      blocks.forEach(block => tech.segments.push({ start: block.start, end: block.end, taskId: -1, taskName: 'DOLU' }));
     });
-  }
 
-  // ============================================================
-  // Teknisyen Öncelikli: zaman bazlı 2'li / 3'lü ekip ataması
-  // ------------------------------------------------------------
-  // Her olay anında (vardiya başı, bir parçanın bitişi) o an boşta olan herkes
-  // 2'li/3'lü ekiplere bölünür. Ekip üyeleri aynı işe aynı saatte başlar ve eşit
-  // süre çalışıp birlikte biter. Artakalan tek kişi önce devam eden 2'li bir
-  // ekibe katılır (ekip 3'lü olur ve daha erken biter); tek başına çalışma ancak
-  // hiçbir ekibe katılamıyorsa ve yalnızca bir sonraki olaya kadar yapılır.
-  // ============================================================
-  function freeRunAt(tech, t){
-    if (tech.segments.some(s => s.start <= t && s.end > t)) return 0;
-    let e = _workEnd_offset;
-    tech.segments.forEach(s => { if (s.start >= t && s.start < e) e = s.start; });
-    return e - t;
-  }
-  function coverageRunAt(t, taskId){
-    const c = buildSupervisorCoverage(techObjs, techRoles, taskId).find(([cs, ce]) => cs <= t && ce > t);
-    return c ? c[1] - t : 0;
-  }
-  // Boştakileri 2'li/3'lü ekiplere böler. Teknisyen yalnızca Supervisor'lü ekibe girer
-  // (Kalifiyeli denetim yapamaz); Supervisor kapasitesi yetmezse Teknisyen bekler.
-  function buildTeams(free){
-    const supTeams = free.filter(x => x.role === 'supervisor').map(s => [s]);
-    for (const r of free.filter(x => x.role === 'regular')) {
-      const team = supTeams.filter(tm => tm.length < 3).sort((a, b) => a.length - b.length)[0];
-      if (!team) break;
-      team.push(r);
-    }
-    const restQ = [];
-    for (const q of free.filter(x => x.role === 'qualified')) {
-      const solo = supTeams.find(tm => tm.length === 1);
-      if (solo) solo.push(q); else restQ.push(q);
-    }
-    const m = Math.ceil(restQ.length / 3);
-    const qTeams = Array.from({ length: m }, () => []);
-    restQ.forEach((x, i) => qTeams[i % m].push(x));
-    return supTeams.sort((a, b) => b.length - a.length).concat(qTeams).filter(tm => tm.length >= 2);
-  }
-  function placeTeamSeg(tech, start, end, item){
-    tech.segments.push({ start, end, taskId: item.task.id, taskName: item.task.name });
-    tech.totalMin += end - start;
-    taskSegments.get(item.task.id).push({ techIndex: tech.index, start, end });
-  }
-
-  function scheduleTeamsTimeFirst(taskList){
-    const queue = taskList.filter(t => t.techWorkMin > 0).map(t => ({ task: t, rem: t.techWorkMin }));
-    const nextItem = () => queue.filter(q => q.rem >= 15).sort((a, b) => b.rem - a.rem || a.task.id - b.task.id)[0];
-    const active = [];
-    const byLoad = (a, b) => a.totalMin - b.totalMin || a.index - b.index;
-    const roleRank = { supervisor: 0, qualified: 1, regular: 2 };
-
-    // Parça kuralları: bir parça en fazla yarım gün (herkesin günü en az 2 parça olsun),
-    // mümkünse kişi başı en az 1 saat (kırıntı parça olmasın). İşi bitirecek son parça
-    // yarım günü en fazla 45dk aşabilir ki arkasında küçük bir artık kalmasın.
-    const PIECE_CAP = Math.max(60, floor15(_workEnd_offset / 2));
-    const MIN_PIECE = 60;
-    // B1 onayları sıkışmasın diye işlerin bitiş saatleri en az 30dk arayla tutulur.
-    const finishTimes = [];
-    const finishClash = e => finishTimes.some(f => Math.abs(f - e) < 30);
-
-    function planPiece(item, members, run){
-      const k = Math.max(1, Math.min(members.length, Math.floor(item.rem / MIN_PIECE)));
-      // Round DOWN to a 15-minute slot: rounding each member UP can make
-      // total assigned man-minutes exceed the task estimate (e.g. 285 min / 3).
-      let share = floor15(item.rem / k);
-      if (share > PIECE_CAP + 45) share = PIECE_CAP;
-      share = Math.min(share, floor15(run));
-      return { k, share, finishes: share * k === item.rem };
-    }
-
-    // Ekip için iş seçimi sırası:
-    //  1) Üyelerin az önce bitirdiği iş tekrar verilmez (iki parça birleşip tek parça olmasın).
-    //  2) Bu parçayla bitebilen işler öne alınır: küçük işler günün erken saatlerinde biter,
-    //     böylece B1 onayları güne yayılır.
-    //  3) Büyük iş önce. Bitişi başka bir işin bitişine 30dk'dan yakın düşecekse sona bırakılır.
-    function pickForTeam(members, run){
-      const lastTasks = new Set();
-      members.forEach(x => x.segments.forEach(sg => { if (sg.end === t && sg.taskId !== -1) lastTasks.add(sg.taskId); }));
-      const cands = queue.filter(q => q.rem >= 15)
-        .map(item => ({ item, ...planPiece(item, members, run) }))
-        .filter(c => c.share >= 15)
-        .map(c => ({ ...c, rank: [
-          (c.finishes && finishClash(t + c.share)) ? 1 : 0,
-          lastTasks.has(c.item.task.id) ? 1 : 0,
-          c.finishes ? 0 : 1
-        ] }))
-        .sort((a, b) => a.rank[0] - b.rank[0] || a.rank[1] - b.rank[1] || a.rank[2] - b.rank[2]
-          || b.item.rem - a.item.rem || a.item.task.id - b.item.task.id);
-      return cands[0] || null;
-    }
-
-    let t = 0;
-    for (let guard = 0; guard < 5000 && t < _workEnd_offset && nextItem(); guard++) {
-      // 1) Boştakileri 2'li/3'lü ekiplere böl; Teknisyen içeren her ekipte Supervisor bulunur.
-      const free = techObjs.filter(x => freeRunAt(x, t) >= 15)
-        .sort((a, b) => roleRank[a.role] - roleRank[b.role] || byLoad(a, b));
-      if (free.length >= 2) {
-        const teams = buildTeams(free);
-        for (let members of teams) {
-          if (!nextItem()) break;
-          const run = Math.min(...members.map(x => freeRunAt(x, t)));
-          const pick = pickForTeam(members, run);
-          if (!pick) continue;
-          const { item, share } = pick;
-          members = members.slice(0, pick.k);
-          members.forEach(x => placeTeamSeg(x, t, t + share, item));
-          item.rem -= share * members.length;
-          if (pick.finishes) finishTimes.push(t + share);
-          if (members.length >= 2) active.push({ item, members, start: t, end: t + share, finishes: pick.finishes });
-        }
-      }
-
-      // 2) Artakalan tek kişi: devam eden 2'li bir ekibe katıl, olmazsa kısa süre tek başına çalış.
-      for (const lone of techObjs.filter(x => freeRunAt(x, t) >= 15)) {
-        const loneRun = freeRunAt(lone, t);
-        let joined = false;
-        const joinable = active.filter(a => a.members.length === 2 && a.start <= t && a.end - t >= 30)
-          .sort((a, b) => b.end - a.end);
-        for (const a of joinable) {
-          const k = a.members.length;
-          const newEnd = t + ceil15x(k * (a.end - t) / (k + 1));
-          if (newEnd >= a.end || loneRun < newEnd - t) continue;
-          if (lone.role === 'regular' && coverageRunAt(t, a.item.task.id) < newEnd - t) continue;
-          const fi = a.finishes ? finishTimes.indexOf(a.end) : -1;
-          if (fi >= 0 && finishTimes.some((f, i) => i !== fi && Math.abs(f - newEnd) < 30)) continue;
-          const segs = a.members.map(x => x.segments.find(sg => sg.taskId === a.item.task.id && sg.end === a.end && sg.start <= t));
-          segs.forEach(seg => { if (seg) seg.end = newEnd; });
-          // Ekip erken bitince, bu ekipteki Supervisor'e güvenen başka Teknisyenler denetimsiz kalmamalı.
-          if (a.members.some(x => x.role === 'supervisor')) {
-            const broken = techObjs.some(x => x.role === 'regular' && x.segments.some(sg =>
-              sg.taskId !== -1 && findGaps(sg.start, sg.end, buildSupervisorCoverage(techObjs, techRoles, sg.taskId)).length > 0));
-            if (broken) { segs.forEach(seg => { if (seg) seg.end = a.end; }); continue; }
-          }
-          a.members.forEach((x, i) => { if (segs[i]) x.totalMin -= (a.end - newEnd); });
-          placeTeamSeg(lone, t, newEnd, a.item);
-          a.item.rem -= (newEnd - t) - k * (a.end - newEnd);
-          if (fi >= 0) finishTimes[fi] = newEnd;
-          a.members.push(lone);
-          a.end = newEnd;
-          joined = true;
-          break;
-        }
-        if (joined) continue;
-
-        if (!nextItem()) break;
-        // Tek başına kalan Teknisyen yalnızca o an Supervisor'ün çalıştığı bir işi alabilir.
-        const item = lone.role === 'regular'
-          ? queue.filter(q => q.rem >= 15 && coverageRunAt(t, q.task.id) >= 15).sort((a, b) => b.rem - a.rem || a.task.id - b.task.id)[0]
-          : nextItem();
-        if (!item) continue;
-        let nextEvent = _workEnd_offset;
-        techObjs.forEach(x => { if (x !== lone) x.segments.forEach(sg => { if (sg.end > t && sg.end < nextEvent) nextEvent = sg.end; }); });
-        let limit = Math.min(loneRun, nextEvent - t);
-        if (lone.role === 'regular') limit = Math.min(limit, coverageRunAt(t, item.task.id));
-        const dur = Math.min(floor15(limit), ceil15x(item.rem), PIECE_CAP);
-        if (dur < 15) continue;
-        placeTeamSeg(lone, t, t + dur, item);
-        item.rem -= dur;
-        if (item.rem <= 0) finishTimes.push(t + dur);
-      }
-
-      // 3) Bir sonraki olay anına geç
-      let nextT = Infinity;
-      techObjs.forEach(x => x.segments.forEach(sg => {
-        if (sg.end > t && sg.end < nextT) nextT = sg.end;
-        if (sg.start > t && sg.start < nextT) nextT = sg.start;
-      }));
-      if (!Number.isFinite(nextT)) break;
-      t = nextT;
-    }
-
-    queue.filter(q => q.rem >= 15).forEach(q => {
-      if (!q.task.isOpen) unallocated.push({ taskId: q.task.id, task: q.task.name, minutes: q.rem, reason: 'Teknisyen kapasitesi doldu; mümkün olan kısım teknisyenlere dağıtıldı' });
+    validPreAssigns.forEach((assigns, techIndex) => {
+      const tech = techObjs[techIndex];
+      if (!tech) return;
+      assigns.forEach(assign => {
+         const taskName = rawTasks[assign.taskId] ? rawTasks[assign.taskId].name : 'İş';
+         tech.segments.push({ start: assign.start, end: assign.end, taskId: assign.taskId, taskName: taskName, locked: true });
+         tech.totalMin += (assign.end - assign.start);
+      });
     });
-  }
 
-  // Grup modu ekip yerleşimi: blok tek kişiye değil, aynı pencerede çalışacak bir ekibe verilir.
-  // Pencerenin sahibi en az yüklü kişidir; sahibi Teknisyen ise aynı pencerede boş bir Supervisor
-  // zorunlu olarak ekibe katılır. Pencerede boş olan diğer kişiler de (yük sırasıyla) aynı pencereye
-  // alınır. Böylece Teknisyenin bloğu, onu denetleyen Supervisor'ün bloğuyla birebir aynı iş ve aynı
-  // saat aralığında olur. Harcanan süre üye sayısı x pencere uzunluğudur ve kalan işçilik bütçesini
-  // aşmaz: bütçe tüm ekibe yetmiyorsa pencere kısaltılır, o da olmazsa üye sayısı azaltılır.
-  // Başarılı olursa yerleştirilen toplam dakikayı, olmazsa 0 döner.
-  function placeGroupWave(task, size, remaining){
-    const roleOf = t => techRoles[t.index];
-    const byLoad = (a, b) => a.totalMin - b.totalMin || a.index - b.index;
-    // [s, s+len) penceresinde çalışabilecek ekip (sahip + gerekiyorsa Supervisor + pencerede boş olanlar).
-    function crew(x, s, len){
-      const e = s + len;
-      // Eşit yükte fazladan Supervisor, Teknisyen/Kalifiyeli'den sonra gelir (denetim için bir tane yeter).
-      const others = techObjs.filter(y => y !== x && isFreeRange(y, s, e))
-        .sort((a, b) => byLoad(a, b) || (roleOf(a) === 'supervisor') - (roleOf(b) === 'supervisor') || a.index - b.index);
-      const xRole = roleOf(x);
-      let host = xRole === 'supervisor' ? x : null;
-      if (!host && (xRole === 'regular' || others.some(y => roleOf(y) === 'regular'))) host = others.find(y => roleOf(y) === 'supervisor') || null;
-      if (xRole === 'regular' && !host) return null;
-      const members = [x];
-      if (host && host !== x) members.push(host);
-      for (const y of others) {
-        if (members.includes(y)) continue;
-        if (roleOf(y) === 'regular' && !host) continue;
-        members.push(y);
+    const tasksCopy = rawTasks.map(t => ({ ...t }));
+    const taskSegments = new Map();
+    tasksCopy.forEach(t => taskSegments.set(t.id, []));
+    const unallocated = [];
+
+    let equalShare = null;
+
+    tasksCopy.sort((a, b) => b.techWorkMin - a.techWorkMin);
+
+    // ============================================================
+    // Ekip tabanlı dağıtım çekirdeği
+    // ------------------------------------------------------------
+    // Bir senaryoda teknisyenler sabit ekiplere (gruplara) bölünür; her teknisyen yalnızca tek bir ekipte
+    // yer alır. Zaman 15 dk'lık hücrelere bölünür ve bir iş parçası bir ekibin hücrelerine yerleşir: o
+    // hücrede ekibin müsait üyeleri aynı işi aynı saatte yapar. Grup modunda bir Teknisyen yalnızca aynı
+    // hücrede aynı işi yapan bir Supervisor ile birlikte iş alır; denetimsiz yerleşim hiçbir adımda yapılmaz.
+    //  1) Dağıtım   : işler (büyükten küçüğe) ekiplere kapasiteleri oranında verilir; sığmayan iş bölünür.
+    //  2) Doğal sıra: her ekip kendi işlerini küçükten büyüğe, vardiya başından itibaren yapar; işin doğal bitişi bulunur.
+    //  3) Hassasiyet: işin bitiş hedefi, doğal bitişten eşit aralıklı B1 onay hedefine doğru hassasiyet oranında
+    //                 kaydırılır (0 = teknisyen eşitliği / doğal sıra, 1 = düzenli B1 onayları).
+    //  4) Yerleşim  : işler hedef bitişlerine göre sırayla, hedeften geriye doğru en geç boş hücrelere yerleştirilir;
+    //                 böylece iş tam hedef saatinde biter ve B1 onayı oraya oturur.
+    // Harcanan süre hiçbir zaman işin kalan işçilik bütçesini (techWorkMin) aşmaz; sığmayan kısım atanamayan olarak raporlanır.
+    // ============================================================
+    const CELL = 15;
+    const GRID_K = Math.floor(_workEnd_offset / CELL);
+    const MIN_RUN = 2;
+    const FIT_SLACK = 2;
+    const roleOf = i => techObjs[i].role;
+    const b1Blocks = normalizeWorkBlocks(load('asdp_headBlocks', []));
+    const b1Blocked = f => b1Blocks.some(b => (f - 1) * CELL < b.end && f * CELL > b.start);
+
+    function makeGrid(){
+      return {
+        occ: techObjs.map(t => {
+          const a = new Uint8Array(GRID_K);
+          for (let k = 0; k < GRID_K; k++) if (!isFreeRange(t, k * CELL, (k + 1) * CELL)) a[k] = 1;
+          return a;
+        }),
+        load: techObjs.map(t => t.totalMin / CELL)
+      };
+    }
+    const cloneGrid = g => ({ occ: g.occ.map(a => a.slice()), load: g.load.slice() });
+
+    // k hücresinde ekibin kullanılabilir üyeleri: müsait olanlar; Grup modunda ekipte müsait Supervisor yoksa Teknisyenler çıkar.
+    function usableAt(grid, crew, k){
+      const free = [];
+      let hasSup = false;
+      for (const p of crew) {
+        if (grid.occ[p][k]) continue;
+        free.push(p);
+        if (roleOf(p) === 'supervisor') hasSup = true;
       }
-      return members;
-    }
-    for (const x of pickCandidates()) {
-      const minMembers = roleOf(x) === 'regular' ? 2 : 1;
-      for (const [fs, fe] of getFreeIntervals(x)) {
-        for (let s = fs; s + 15 <= fe; s += 15) {
-          let len = Math.min(size, floor15(fe - s));
-          // Daha kısa süre müsait olan kişileri (dolu saati yaklaşan) de ekibe alabilmek için pencere, en çok
-          // kişinin katılabildiği uzunluğa çekilir; işin kalanı sonraki dalgada devam eder.
-          const runs = new Set();
-          techObjs.forEach(y => {
-            if (y === x || y.segments.some(sg => sg.start <= s && sg.end > s)) return; // s anında zaten dolu
-            let next = _workEnd_offset;
-            y.segments.forEach(sg => { if (sg.start > s && sg.start < next) next = sg.start; });
-            const run = floor15(next - s);
-            if (run >= 30 && run < len) runs.add(run);
-          });
-          let bestCount = (crew(x, s, len) || []).length;
-          runs.forEach(run => {
-            const c = (crew(x, s, run) || []).length;
-            if (c > bestCount || (c === bestCount && run > len && c > 0)) { bestCount = c; len = run; }
-          });
-          let members = null;
-          for (let guard = 0; guard < 6 && len >= 15; guard++) {
-            members = crew(x, s, len);
-            if (!members || members.length * len <= remaining) break;
-            const shorter = floor15(remaining / members.length);
-            if (shorter >= 15 && shorter < len) { len = shorter; members = null; continue; }
-            if (len > 15) { len = 15; members = null; continue; }
-            const fit = Math.floor(remaining / len);
-            members = fit >= minMembers ? members.slice(0, fit) : null;
-            break;
-          }
-          if (!members || len < 15) continue;
-          members.forEach(m => {
-            m.segments.push({ start: s, end: s + len, taskId: task.id, taskName: task.name });
-            m.totalMin += len;
-            taskSegments.get(task.id).push({ techIndex: m.index, start: s, end: s + len });
-          });
-          return members.length * len;
-        }
-      }
-    }
-    return 0;
-  }
-
-  function scheduleTaskList(taskList, options){
-    options = options || {};
-    const isOpenFill = !!options.openFill;
-    for(const task of taskList){
-      const techWork = task.techWorkMin;
-      if(techWork === 0) continue;
-
-      let remainingWork = techWork;
-      while(remainingWork > 0) {
-        let targetBlockSize;
-        if (isOpenFill) {
-          targetBlockSize = 15;
-        } else if (algoMode === 'tech_priority') {
-          targetBlockSize = remainingWork;
-        } else {
-          targetBlockSize = Math.max(30, Math.ceil(remainingWork / Math.max(1, technicians.length)));
-        }
-        targetBlockSize = ceil15x(targetBlockSize);
-        let blockSize = Math.min(targetBlockSize, remainingWork);
-        blockSize = Math.max(15, round15(blockSize));
-        if (blockSize > remainingWork) blockSize = remainingWork;
-
-        const candidates = pickCandidates();
-        let placed = false;
-        const maxAttempts = isOpenFill ? 1 : 2;
-        for(let attempt = 0; attempt < maxAttempts && !placed; attempt++){
-          const trySize = (attempt === 0) ? blockSize : Math.max(15, floor15(blockSize * 0.7));
-          const finalSize = Math.min(trySize, remainingWork);
-          if (finalSize < 15) break;
-
-          if (isGroup && !isOpenFill) {
-            const waveMin = placeGroupWave(task, finalSize, remainingWork);
-            if (waveMin > 0) { remainingWork -= waveMin; placed = true; break; }
-          }
-
-          for (const tech of candidates) {
-            let result;
-            if (isGroup && tech.role === 'supervisor') {
-              result = placeSupervisorSmart(tech, finalSize, task.id, task.name, techObjs, techRoles);
-            } else if (isGroup && tech.role === 'regular') {
-              const cov = buildSupervisorCoverage(techObjs, techRoles, task.id);
-              if (cov.length > 0) result = placeOnTech(tech, finalSize, task.id, task.name, { coverage: cov });
-            } else {
-              result = placeOnTech(tech, finalSize, task.id, task.name);
-            }
-            if (result) {
-              taskSegments.get(task.id).push({ techIndex: tech.index, start: result.start, end: result.end });
-              remainingWork -= (result.end - result.start);
-              placed = true;
-              break;
-            }
-          }
-        }
-
-        if(!placed && !isOpenFill) {
-          const finalSize = Math.min(15, remainingWork);
-          const tinyCandidates = pickCandidates();
-          for (const tech of tinyCandidates) {
-            let result;
-            if (isGroup && tech.role === 'supervisor') {
-              result = placeSupervisorSmart(tech, finalSize, task.id, task.name, techObjs, techRoles);
-            } else if (isGroup && tech.role === 'regular') {
-              const cov = buildSupervisorCoverage(techObjs, techRoles, task.id);
-              if (cov.length > 0) result = placeOnTech(tech, finalSize, task.id, task.name, { coverage: cov });
-            } else {
-              result = placeOnTech(tech, finalSize, task.id, task.name);
-            }
-            if (result) {
-              taskSegments.get(task.id).push({ techIndex: tech.index, start: result.start, end: result.end });
-              remainingWork -= (result.end - result.start);
-              placed = true;
-              break;
-            }
-          }
-        }
-
-        if(!placed) {
-          if (!isOpenFill) unallocated.push({ taskId: task.id, task: task.name, minutes: remainingWork, reason: 'Teknisyen kapasitesi doldu; mümkün olan kısım teknisyenlere dağıtıldı' });
-          break;
-        }
-      }
-    }
-  }
-
-  // ============================================================
-  // Tek iş kartı: iş tüm personele eşit paylaştırılır.
-  // ------------------------------------------------------------
-  // Pay 15dk'lık birimlerle dağıtılır; sıradaki 15dk her zaman o işte en az
-  // süresi olana gider (manuel atanmış süre kişinin payına sayılır). İşçilik
-  // tahmini hiçbir zaman dengeleme amacıyla artırılmaz; yuvarlama ve kapasite
-  // farkları raporlanır. Herkes mümkün olduğunca aynı saatlerde birlikte çalışır.
-  // Grup modunda Teknisyen
-  // yalnızca aynı işte Supervisor'ün çalıştığı dilimleri alabilir; alamadığı
-  // pay diğer personele geçer (denetim kuralı eşitlikten önce gelir).
-  // ============================================================
-  function scheduleSingleTaskEqually(task){
-    const SLOT = 15;
-    const K = Math.floor(_workEnd_offset / SLOT);
-    const n = techObjs.length;
-    const ids = techObjs.map((_, i) => i);
-    const isSup = i => isGroup && techObjs[i].role === 'supervisor';
-    const isReg = i => isGroup && techObjs[i].role === 'regular';
-    const rank = i => isSup(i) ? 0 : isReg(i) ? 2 : 1;
-    const overlapsSlot = (s, k) => s.start < (k + 1) * SLOT && s.end > k * SLOT;
-
-    const pre = techObjs.map(t => t.segments.reduce((sum, s) => (s.locked && s.taskId === task.id) ? sum + (s.end - s.start) : sum, 0));
-    const free = techObjs.map(t => Array.from({ length: K }, (_, k) => isFreeRange(t, k * SLOT, (k + 1) * SLOT)));
-    const initialCaps = free.map(f => f.filter(Boolean).length * SLOT);
-    const work = task.isOpen
-      ? floor15(Math.max(0, Math.max(15, ceil15x(task.rawMin)) - (task.preAssignedMin || 0)))
-      : task.techWorkMin;
-
-    // Supervisor'ün manuel atamasıyla zaten denetlenen dilimler ve denetim bekleyen manuel Teknisyen dilimleri.
-    const supLockedAt = Array.from({ length: K }, (_, k) => ids.some(i => isSup(i) &&
-      techObjs[i].segments.some(s => s.locked && s.taskId === task.id && s.start <= k * SLOT && s.end >= (k + 1) * SLOT)));
-    const regLockedAt = Array.from({ length: K }, (_, k) => ids.some(i => isReg(i) &&
-      techObjs[i].segments.some(s => s.locked && s.taskId === task.id && overlapsSlot(s, k))));
-    const regFreeAt = Array.from({ length: K }, (_, k) => ids.filter(i => isReg(i) && free[i][k]).length);
-
-    // Herkes dilimleri aynı sırayla seçer ki ekip aynı saatlerde birlikte çalışsın: bu işe ait
-    // manuel atama varsa onun çevresi, yoksa vardiya başı önce gelir.
-    const anchors = [];
-    for (let k = 0; k < K; k++) if (techObjs.some(t => t.segments.some(s => s.locked && s.taskId === task.id && overlapsSlot(s, k)))) anchors.push(k);
-    const dist = k => anchors.length ? Math.min(...anchors.map(a => Math.abs(a - k))) : k;
-    const pos = new Array(K);
-    Array.from({ length: K }, (_, k) => k).sort((a, b) => dist(a) - dist(b) || a - b).forEach((k, p) => { pos[k] = p; });
-
-    function allocate(caps){
-      const add = ids.map(() => 0);
-      let rest = work;
-      while (rest >= SLOT) {
-        let best = -1;
-        for (const i of ids) {
-          if (add[i] + SLOT > caps[i]) continue;
-          const d = best < 0 ? -1 : (pre[i] + add[i]) - (pre[best] + add[best]);
-          if (d < 0 || (d === 0 && rank(i) < rank(best))) best = i;
-        }
-        if (best < 0) break;
-        add[best] += SLOT;
-        rest -= SLOT;
-      }
-      return add;
+      if (!isGroup || hasSup) return free;
+      return free.filter(p => roleOf(p) !== 'regular');
     }
 
-    // Supervisor'ler önce denetim bekleyen manuel Teknisyen dilimlerini, sonra en çok Teknisyenin boş
-    // olduğu dilimleri alır; Kalifiyeli Supervisor'lerin çalıştığı dilimleri tercih eder, Teknisyen
-    // yalnızca bu dilimlere yerleşir.
-    function place(add){
-      const take = ids.map(() => []);
-      const covered = supLockedAt.slice();
-      for (const i of ids.slice().sort((a, b) => rank(a) - rank(b) || a - b)) {
-        const need = add[i] / SLOT;
-        if (!need) continue;
-        const slots = [];
-        for (let k = 0; k < K; k++) if (free[i][k] && (!isReg(i) || covered[k])) slots.push(k);
-        const score = isSup(i) ? (k => (regLockedAt[k] && !covered[k] ? 1000 : 0) + regFreeAt[k])
-          : isGroup ? (k => covered[k] ? 1 : 0) : (() => 0);
-        slots.sort((a, b) => score(b) - score(a) || pos[a] - pos[b]);
-        take[i] = slots.slice(0, need).sort((a, b) => a - b);
-        if (isSup(i)) take[i].forEach(k => { covered[k] = true; });
-      }
-      return take;
+    // Hücrede çalışacak üyeler: yeterli kişi varsa hepsi; azsa önce önceki hücredeki ekip (süreklilik), sonra en az yüklü olanlar.
+    // Grup modunda Teknisyen seçildiyse seçime bir Supervisor girer. Hücrede kalan Teknisyenler Supervisor'süz kalıp boşa
+    // çıkmasın diye: tek Supervisor kalıyorsa önce Teknisyenler alınır (onsuz çalışamazlar) ya da seçim Supervisor'süz
+    // Kalifiyelilerden yapılır; birden çok Supervisor varsa fazladan Supervisor alınmaz (diğeri başka işte denetleyebilsin).
+    function pickParticipants(grid, usable, need, prev){
+      if (need >= usable.length) return usable.slice();
+      const ord = usable.slice().sort((a, b) => (prev.has(b) - prev.has(a)) || (grid.load[a] - grid.load[b]) || (a - b));
+      if (!isGroup) return ord.slice(0, need);
+      const sups = ord.filter(p => roleOf(p) === 'supervisor');
+      const regs = ord.filter(p => roleOf(p) === 'regular');
+      if (!regs.length) return ord.slice(0, need);
+      const quals = ord.filter(p => roleOf(p) === 'qualified');
+      // Supervisor'lü seçim: bir Supervisor + (tek Supervisor kaldıysa önce Teknisyenler) + diğerleri.
+      const others = sups.length === 1 ? regs.concat(quals) : ord.filter(p => roleOf(p) !== 'supervisor');
+      const withSup = [sups[0]].concat(others.slice(0, need - 1));
+      for (const p of ord) { if (withSup.length >= need) break; if (!withSup.includes(p)) withSup.push(p); }
+      const stranded = sups.length === 1 ? regs.filter(r => !withSup.includes(r)).length : 0;
+      if (stranded > 0 && quals.length >= need) return quals.slice(0, need);
+      return withSup;
     }
 
-    // Supervisor dilimleri bir Teknisyenin payına yetmezse o Teknisyenin üst sınırı düşürülür ve pay yeniden dağıtılır.
-    const caps = initialCaps.slice();
-    const supervisionLimited = ids.map(() => false);
-    let take;
-    for (let guard = 0; guard < 500; guard++) {
-      const add = allocate(caps);
-      take = place(add);
-      const short = ids.filter(i => take[i].length * SLOT < add[i]);
-      if (!short.length) break;
-      short.forEach(i => { caps[i] = take[i].length * SLOT; supervisionLimited[i] = true; });
-    }
-
-    ids.forEach(i => {
+    // units (15 dk'lık kişi-birimi) kadar işi ekibin hücrelerine yerleştirir.
+    //  dir 'fwd': vardiya başından ileri doğru; dir 'bwd': bound hücresinden geriye doğru (olmazsa bound'dan sonrasına).
+    // Kısa (MIN_RUN'dan az) boşluklar önce atlanır; böylece iş mümkün olduğunca ardışık hücrelerde toplanır.
+    function placePiece(grid, crew, units, dir, bound, onCell){
+      const none = { placed: 0, first: -1, last: -1 };
+      if (units <= 0 || !crew.length || GRID_K <= 0) return none;
+      const caps = [];
+      let maxCap = 0;
+      for (let k = 0; k < GRID_K; k++) { const u = usableAt(grid, crew, k); caps.push(u); if (u.length > maxCap) maxCap = u.length; }
+      if (!maxCap) return none;
+      const minRun = Math.min(MIN_RUN, Math.ceil(units / maxCap));
       const runs = [];
-      take[i].forEach(k => {
-        const last = runs[runs.length - 1];
-        if (last && last[1] === k) last[1] = k + 1; else runs.push([k, k + 1]);
-      });
-      runs.forEach(([a, b]) => {
-        const start = a * SLOT, end = b * SLOT;
-        techObjs[i].segments.push({ start, end, taskId: task.id, taskName: task.name });
-        techObjs[i].totalMin += end - start;
-        taskSegments.get(task.id).push({ techIndex: i, start, end });
-      });
-    });
-
-    const placed = take.reduce((s, tk) => s + tk.length * SLOT, 0);
-    const rest = work - placed;
-    if (rest >= SLOT && !task.isOpen) {
-      unallocated.push({ taskId: task.id, task: task.name, minutes: rest, reason: 'Teknisyen kapasitesi doldu; mümkün olan kısım teknisyenlere dağıtıldı' });
+      for (let k = 0; k < GRID_K;) {
+        if (!caps[k].length) { k++; continue; }
+        let b = k;
+        while (b < GRID_K && caps[b].length) b++;
+        runs.push([k, b]);
+        k = b;
+      }
+      let seq;
+      if (dir === 'fwd') {
+        seq = runs.map(([a, b], i) => ({ a, b, asc: true, exempt: i === 0 }));
+      } else {
+        const below = [], above = [];
+        runs.forEach(([a, b]) => {
+          if (a < bound) below.push({ a, b: Math.min(b, bound), asc: false, exempt: b >= bound });
+          if (b > bound) above.push({ a: Math.max(a, bound), b, asc: true, exempt: false });
+        });
+        seq = below.reverse().concat(above);
+      }
+      let rem = units, first = Infinity, last = -1, prevK = -10, prevSet = new Set();
+      const take = k => {
+        const u = usableAt(grid, crew, k);
+        if (!u.length) return;
+        const ps = pickParticipants(grid, u, rem, Math.abs(k - prevK) === 1 ? prevSet : new Set());
+        if (!ps.length) return;
+        ps.forEach(p => { grid.occ[p][k] = 1; grid.load[p] += 1; onCell(p, k); });
+        rem -= ps.length;
+        prevK = k; prevSet = new Set(ps);
+        if (k < first) first = k;
+        if (k > last) last = k;
+      };
+      for (const strict of [true, false]) {
+        for (const run of seq) {
+          if (rem <= 0) break;
+          if (strict && !run.exempt && run.b - run.a < minRun) continue;
+          if (run.asc) { for (let k = run.a; k < run.b && rem > 0; k++) take(k); }
+          else { for (let k = run.b - 1; k >= run.a && rem > 0; k--) take(k); }
+        }
+        if (rem <= 0) break;
+      }
+      return { placed: units - rem, first: last < 0 ? -1 : first, last };
     }
-    return { task, pre, initialCaps, supervisionLimited, padded: Math.max(0, -rest),
-      target: (work + pre.reduce((s, p) => s + p, 0)) / n,
-      planned: ids.map(i => pre[i] + take[i].length * SLOT) };
-  }
 
-  // Manuel atanmış Teknisyen parçalarına, işin kalan süresinden, aynı işte ve aynı saatte
-  // boş bir Supervisor yerleştirilir; aksi halde bu parçalar denetimsiz kalıp kesilirdi.
-  // Tek iş kartında bu yerleşimi eşit paylaşım kendisi yapar.
-  if (isGroup && !singleTask) {
-    techObjs.filter(x => x.role === 'regular').forEach(reg => {
-      reg.segments.filter(s => s.locked).forEach(seg => {
-        const task = tasksCopy.find(t => t.id === seg.taskId);
-        if (!task) return;
-        for (const [gs, ge] of findGaps(seg.start, seg.end, buildSupervisorCoverage(techObjs, techRoles, seg.taskId))) {
-          let cur = gs;
-          while (cur + 15 <= ge && task.techWorkMin >= 15) {
-            const sup = techObjs.filter(s => s.role === 'supervisor' && isFreeRange(s, cur, cur + 15))
-              .sort((a, b) => a.totalMin - b.totalMin || a.index - b.index)[0];
-            if (!sup) { cur += 15; continue; }
-            let end = cur + 15;
-            while (end + 15 <= ge && end + 15 - cur <= task.techWorkMin && isFreeRange(sup, end, end + 15)) end += 15;
-            sup.segments.push({ start: cur, end, taskId: task.id, taskName: task.name });
-            sup.totalMin += end - cur;
-            task.techWorkMin -= end - cur; // Supervisor zamanı aynı işçilik bütçesinden düşülür
-            taskSegments.get(task.id).push({ techIndex: sup.index, start: cur, end });
-            cur = end;
+    const freeUnits = (grid, crew) => { let s = 0; for (let k = 0; k < GRID_K; k++) s += usableAt(grid, crew, k).length; return s; };
+
+    // Adım 1: işleri ekiplere paylaştır. Her ekibe kapasitesi oranında yük düşer (kişi başı yük eşitlenir);
+    // iş mümkünse bölünmeden tek ekibe verilir, sığmayan iş en az sayıda ekibe bölünür.
+    function planAllocation(jobs, grid){
+      const capU = crews.map(crew => freeUnits(grid, crew));
+      const capSum = capU.reduce((a, b) => a + b, 0);
+      const totalU = jobs.reduce((a, j) => a + j.units, 0);
+      const target = capU.map(c => (capSum ? totalU * c / capSum : 0));
+      const assigned = crews.map(() => 0);
+      const alloc = new Map();
+      jobs.slice().sort((a, b) => b.units - a.units || a.id - b.id).forEach(j => {
+        let need = j.units;
+        const parts = [];
+        const room = c => Math.max(0, capU[c] - assigned[c]);
+        const fit = crews.map((_, c) => c)
+          .filter(c => room(c) >= need && target[c] - assigned[c] >= need - FIT_SLACK)
+          .sort((a, b) => (target[a] - assigned[a]) - (target[b] - assigned[b]) || a - b)[0];
+        if (fit !== undefined) {
+          parts.push({ c: fit, units: need });
+          assigned[fit] += need;
+          need = 0;
+        } else {
+          const order = crews.map((_, c) => c).sort((a, b) => (target[b] - assigned[b]) - (target[a] - assigned[a]) || a - b);
+          for (const pass of [0, 1]) {
+            for (const c of order) {
+              if (need <= 0) break;
+              const cap = pass === 0 ? Math.min(room(c), Math.max(0, Math.ceil(target[c] - assigned[c] - 1e-9))) : room(c);
+              const takeU = Math.min(need, cap);
+              if (takeU <= 0) continue;
+              const ex = parts.find(p => p.c === c);
+              if (ex) ex.units += takeU; else parts.push({ c, units: takeU });
+              assigned[c] += takeU;
+              need -= takeU;
+            }
           }
         }
+        alloc.set(j.id, { parts, leftover: need });
       });
-    });
-  }
-
-  const mandatoryTasks = tasksCopy.filter(t => !t.isOpen).sort((a, b) => b.techWorkMin - a.techWorkMin);
-  const openTasks = tasksCopy.filter(t => t.isOpen).sort((a, b) => a.techWorkMin - b.techWorkMin || a.id - b.id);
-
-  if (singleTask) {
-    equalShare = scheduleSingleTaskEqually(singleTask);
-  } else if (algoMode === 'tech_priority') {
-    scheduleTeamsTimeFirst(mandatoryTasks);
-    // OPEN işler de kalan boşluklara ekip halinde yerleşir.
-    scheduleTeamsTimeFirst(openTasks);
-  } else {
-    scheduleTaskList(mandatoryTasks, { openFill:false });
-  }
-  // Supervisor coverage on fixed regular-technician assignments consumes the same
-  // remaining man-hour budget as any other segment; do not add those minutes back.
-  mergeAndRecompute(techObjs);
-
-  if (isGroup) repairCoverage(techObjs, techRoles);
-  mergeAndRecompute(techObjs);
-
-  function getTotals(){ return techObjs.map((t,i)=>({ idx:i, total:t.totalMin })); }
-  let totals = getTotals();
-  
-  if (algoMode === 'b1_priority' && !singleTask) {
-    let iter = 0;
-    while(iter < 200){
-    iter++;
-    totals.sort((a,b)=>b.total - a.total);
-    const maxTech = totals[0], minTech = totals[totals.length-1];
-    const diff = maxTech.total - minTech.total;
-    if(diff < 30) break;
-
-    const donor = techObjs[maxTech.idx];
-    const receiver = techObjs[minTech.idx];
-
-    let transferred = false;
-    donor.segments.sort((a,b) => (a.end - a.start) - (b.end - b.start));
-    for(let si = 0; si < donor.segments.length; si++){
-      const seg = donor.segments[si];
-      if (seg.taskId === -1 || seg.locked) continue;
-      const segDuration = seg.end - seg.start;
-      if(segDuration >= 15){
-        let transferAmount = floor15(diff / 2);
-        if (transferAmount > segDuration) transferAmount = segDuration;
-        // Supervisor'den alınan parça, aynı işteki Teknisyeni denetimsiz bırakacaksa aktarılmaz.
-        if (isGroup && shrinkBreaksSupervision(techObjs, techRoles, donor, seg, seg.end - transferAmount)) continue;
-
-        // Önce donörün parçası kısaltılır ki alıcı Teknisyen, devredilen Supervisor süresine güvenerek yerleşmesin.
-        const oldEnd = seg.end;
-        seg.end -= transferAmount;
-        let attempt;
-        if (isGroup && receiver.role === 'regular') {
-          const cov = buildSupervisorCoverage(techObjs, techRoles, seg.taskId);
-          attempt = (cov.length > 0) ? placeOnTech(receiver, transferAmount, seg.taskId, seg.taskName, { coverage: cov }) : null;
-        } else {
-          attempt = placeOnTech(receiver, transferAmount, seg.taskId, seg.taskName);
-        }
-        if (!attempt) seg.end = oldEnd;
-        if(attempt){
-          if(segDuration === transferAmount) donor.segments.splice(si, 1);
-          donor.totalMin -= transferAmount;
-          const arr = taskSegments.get(seg.taskId) || [];
-          arr.push({ techIndex: receiver.index, start: attempt.start, end: attempt.end });
-          taskSegments.set(seg.taskId, arr);
-          transferred = true;
-          break;
-        }
-      }
+      return alloc;
     }
-    if(!transferred) break;
-      mergeAndRecompute(techObjs);
-      totals = getTotals();
-    }
-    mergeAndRecompute(techObjs);
-  }
 
-  // Teknisyen Öncelikli modda işleri 15dk'lık parçalara bölmemek için boştaki teknisyene parça aktarılmaz.
-  if (algoMode === 'b1_priority' && !singleTask) ensureNoIdleTech(techObjs, techRoles, isGroup);
-  if (isGroup) repairCoverage(techObjs, techRoles);
-  mergeAndRecompute(techObjs);
-
-  let taskFinalEnd = new Map();
-  let taskFinalStart = new Map();
-  function recomputeTaskTimeline(){
-    taskFinalEnd = new Map();
-    taskFinalStart = new Map();
-    for(const task of tasksCopy){
-      const actualSegments = [];
-      techObjs.forEach((tech, ti) => {
-        tech.segments.forEach(seg => {
-          if (seg.taskId === task.id) actualSegments.push({ techIndex: ti, start: seg.start, end: seg.end });
+    // Adım 2: her ekip işlerini küçükten büyüğe, vardiya başından itibaren yapsaydı işlerin bitiş hücreleri (doğal bitiş).
+    function naturalPass(jobs, alloc, grid){
+      const g = cloneGrid(grid);
+      const fin = new Map();
+      crews.forEach((crew, c) => {
+        const pieces = [];
+        jobs.forEach(j => { (alloc.get(j.id)?.parts || []).forEach(p => { if (p.c === c) pieces.push({ job: j, units: p.units }); }); });
+        pieces.sort((x, y) => x.job.units - y.job.units || x.job.id - y.job.id);
+        pieces.forEach(pc => {
+          const r = placePiece(g, crew, pc.units, 'fwd', 0, () => {});
+          if (r.placed > 0) fin.set(pc.job.id, Math.max(fin.get(pc.job.id) || 0, r.last + 1));
         });
       });
-      if(actualSegments.length === 0){
-        taskFinalEnd.set(task.id, null); taskFinalStart.set(task.id, null); continue;
-      }
-      taskFinalEnd.set(task.id, Math.max(...actualSegments.map(s => s.end)));
-      taskFinalStart.set(task.id, Math.max(...actualSegments.map(s => s.start)));
+      return fin;
     }
-  }
-  recomputeTaskTimeline();
 
-  const headOverflowAssignments = [];
-  const finalUnallocated = [];
-  const b1OnlyTaskIds = new Set();
-  const headAssignments = [];
-  const headUnallocated = [];
-  const supervisionGaps = [];
-
-  function isWindowFree(tech, start, end) {
-    if (start < 0 || end > _workEnd_offset || end <= start) return false;
-    return !tech.segments.some(seg => start < seg.end && end > seg.start);
-  }
-  function scheduleExactWindow(tech, start, end, taskId, taskName) {
-    if (!isWindowFree(tech, start, end)) return null;
-    tech.segments.push({ start, end, taskId, taskName });
-    tech.totalMin += (end - start);
-    return { start, end };
-  }
-  function tryScheduleOnTechNotBefore(tech, duration, taskId, taskName, notBeforeStart) {
-    return placeOnTech(tech, duration, taskId, taskName, { notBefore: notBeforeStart });
-  }
-  function removeTaskFromTechnicians(taskId){
-    techObjs.forEach(tech => {
-      const kept = []; let removed = 0;
-      tech.segments.forEach(seg => {
-        if (seg.taskId === taskId) removed += (seg.end - seg.start);
-        else kept.push(seg);
-      });
-      tech.segments = kept;
-      tech.totalMin = Math.max(0, tech.totalMin - removed);
-    });
-    taskSegments.set(taskId, []);
-  }
-
-  function assignedTaskMinutesOnTechnicians(taskId){
-    return techObjs.reduce((sum, tech) => sum + tech.segments.reduce((s, seg) => {
-      if (seg.taskId === taskId) return s + (seg.end - seg.start);
-      return s;
-    }, 0), 0);
-  }
-
-  // B1 parçaları: kind boşsa onay, 'support' = kısmen atanmış işe B1 iş desteği, 'b1only' = B1'e verilen iş.
-  // Farklı türdeki bitişik parçalar birleştirilmez; böylece onay ile iş desteği listede ayrı görünür.
-  function mergeSingleSchedule(obj){
-    if (!obj) return;
-    obj.segments.sort((a,b)=>a.start - b.start || a.end - b.end);
-    const merged = [];
-    for (const s of obj.segments) {
-      const last = merged[merged.length - 1];
-      if (last && last.taskId === s.taskId && last.end === s.start && !!last.locked === !!s.locked && (last.kind || '') === (s.kind || '')) {
-        last.end = s.end;
-      } else {
-        merged.push({...s});
+    // Adım 3: bitiş hedefleri. Doğal bitişler sırasıyla eşit aralıklı hedeflere (son iş değişmez) sens oranında yaklaştırılır;
+    // hedef hiçbir zaman doğal bitişten erken olmaz (erken hedef yerleştirilemeyeceği için). sens küçükse hedef = doğal bitiş.
+    function computeDeadlines(jobs, fin){
+      const list = jobs.filter(j => fin.has(j.id)).map(j => ({ j, n: fin.get(j.id) }))
+        .sort((a, b) => a.n - b.n || a.j.units - b.j.units || a.j.id - b.j.id);
+      const cnt = list.length;
+      const tEnd = cnt ? Math.max(...list.map(x => x.n)) : 0;
+      const f = list.map((x, r) => Math.min(GRID_K, x.n + Math.round(sens * Math.max(0, Math.ceil(tEnd * (r + 1) / cnt) - x.n))));
+      if (sens > 0.15) {
+        // B1 onayları (işin son hücresi) üst üste binmesin ve B1'in dolu saatine denk gelmesin.
+        let prev = 0;
+        for (let r = 0; r < cnt; r++) {
+          let v = Math.max(f[r], list[r].n);
+          while ((v <= prev || b1Blocked(v)) && v < GRID_K) v++;
+          f[r] = v; prev = v;
+        }
+        for (let r = cnt - 2; r >= 0; r--) {
+          if (f[r] >= f[r + 1]) { const alt = Math.max(list[r].n, f[r + 1] - 1); if (!b1Blocked(alt)) f[r] = alt; }
+        }
       }
+      const out = new Map();
+      list.forEach((x, r) => out.set(x.j.id, f[r]));
+      return out;
     }
-    obj.segments = merged;
-    obj.totalMin = obj.segments.reduce((sum, seg) => seg.taskId === -1 ? sum : sum + (seg.end - seg.start), 0);
-  }
 
-  let headObj = null;
-  const headSupportAssignments = [];
-
-  // ------------------------------------------------------------
-  // Kalan işi kurtarma: kapasite yüzünden atanamayan süre, hiç süre eklenmeden
-  //  1) teknisyenlerin boşalan/kalan aralıklarına (Teknisyen için aynı işte Supervisor kapsamıyla),
-  //  2) B1'in boş zamanına (iş desteği) yerleştirilmeye çalışılır.
-  // Önce işin B1 onayından önceki boşluklar denenir; olmazsa onaydan sonrası kullanılır.
-  // Küçük kalanlar önce gelir ki mümkün olduğunca çok iş tamamlansın.
-  // ------------------------------------------------------------
-  function rescueLeftoverWork(){
-    if (!headObj) return;
-    const dropFromScheduler = (taskId, minutes) => {
-      for (let i = 0; i < unallocated.length && minutes > 0; i++) {
-        const entry = unallocated[i];
-        if (entry.taskId !== taskId) continue;
-        const cut = Math.min(entry.minutes, minutes);
-        entry.minutes -= cut;
-        minutes -= cut;
-      }
-      for (let i = unallocated.length - 1; i >= 0; i--) if (unallocated[i].minutes <= 0) unallocated.splice(i, 1);
+    const recFor = job => (p, k) => {
+      const start = k * CELL;
+      techObjs[p].segments.push({ start, end: start + CELL, taskId: job.task.id, taskName: job.task.name });
+      techObjs[p].totalMin += CELL;
+      taskSegments.get(job.task.id).push({ techIndex: p, start, end: start + CELL });
     };
 
-    finalUnallocated.filter(u => u.rescuable && u.minutes >= 15).sort((a, b) => a.minutes - b.minutes).forEach(u => {
-      const task = tasksCopy.find(t => t.id === u.taskId);
-      if (!task || task.isOpen) return;
-      const approvalStarts = headObj.segments.filter(s => s.taskId === task.id && !s.kind).map(s => s.start);
-      const softEnd = approvalStarts.length ? Math.min(...approvalStarts) : _workEnd_offset;
-      const limits = softEnd < _workEnd_offset ? [softEnd, _workEnd_offset] : [_workEnd_offset];
-      // İşin toplamı (teknisyenler + B1) girilen tahmini aşamaz: yalnızca gerçek eksik kadar süre taşınır.
-      const placedNow = assignedTaskMinutesOnTechnicians(task.id)
-        + headObj.segments.reduce((sum, seg) => seg.taskId === task.id ? sum + (seg.end - seg.start) : sum, 0);
-      const budget = Math.max(15, ceil15x(task.techTargetMin + task.headAlloc));
-      const shortfall = Math.min(u.minutes, budget - placedNow);
-      if (shortfall < 15) return;
-      let rest = shortfall;
-      let onTechs = 0, onB1 = 0;
-
-      if (!u.b1OnlyFull) {
-        const order = techObjs.slice().sort((a, b) =>
-          (isGroup && techRoles[a.index] === 'regular') - (isGroup && techRoles[b.index] === 'regular') || a.totalMin - b.totalMin || a.index - b.index);
-        for (const limitEnd of limits) {
-          for (const tech of order) {
-            const needsCover = isGroup && techRoles[tech.index] === 'regular';
-            while (rest >= 15) {
-              const slot = findSlotBefore(tech, rest, limitEnd, needsCover ? buildSupervisorCoverage(techObjs, techRoles, task.id) : null);
-              if (!slot) break;
-              tech.segments.push({ start: slot.start, end: slot.end, taskId: task.id, taskName: task.name });
-              tech.totalMin += slot.end - slot.start;
-              rest -= slot.end - slot.start;
-              onTechs += slot.end - slot.start;
-            }
-          }
-        }
-      }
-
-      for (const limitEnd of limits) {
-        while (rest >= 15) {
-          const slot = findSlotBefore(headObj, rest, limitEnd, null);
-          if (!slot) break;
-          const kind = u.b1OnlyFull ? 'b1only' : 'support';
-          headObj.segments.push({ start: slot.start, end: slot.end, taskId: task.id, taskName: task.name, kind });
-          headObj.totalMin += slot.end - slot.start;
-          (u.b1OnlyFull ? headOverflowAssignments : headSupportAssignments)
-            .push({ taskId: task.id, taskName: task.name, start: slot.start, end: slot.end, type: u.b1OnlyFull ? 'b1Only' : 'b1Support' });
-          rest -= slot.end - slot.start;
-          onB1 += slot.end - slot.start;
-        }
-      }
-
-      if (onTechs + onB1 > 0) {
-        mergeAndRecompute(techObjs);
-        mergeSingleSchedule(headObj);
-        dropFromScheduler(task.id, onTechs + onB1);
-        u.minutes = rest; // gerçek eksik: yerleşenden sonra kalan
-        if (rest > 0) u.reason = 'Teknisyen ve B1 kapasitesi doldu; işin mümkün olan kısmı yerleştirildi, kalan kısım atanamadı';
-      }
-    });
-    for (let i = finalUnallocated.length - 1; i >= 0; i--) if (finalUnallocated[i].rescuable && finalUnallocated[i].minutes <= 0) finalUnallocated.splice(i, 1);
-  }
-
-  if (true) {
-    headObj = { name: headTech, segments: [], totalMin: 0 };
-
-    const headBlockInputs = load('asdp_headBlocks', []);
-    // B1 dolu aralıklarını da teknisyen bloklarıyla aynı mola-dostu dönüşümden geçir.
-    // Başlangıç molanın içinde olsa bile mola bitişinden sonraki doluluk korunur.
-    normalizeWorkBlocks(headBlockInputs).forEach(block => {
-      headObj.segments.push({ start: block.start, end: block.end, taskId: -1, taskName: 'DOLU' });
-    });
-
-    const unallocatedTaskIds = Array.from(new Set(unallocated
-      .map(u => Number.isFinite(u.taskId) ? u.taskId : (tasksCopy.find(t => t.name === u.task)?.id))
-      .filter(id => Number.isFinite(id) && !(tasksCopy.find(t => t.id === id)?.isOpen))));
-
-    if (unallocatedTaskIds.length > 0) {
-      const partlyAssignedItems = [];
-      const b1OnlyCandidates = unallocatedTaskIds
-        .map(id => tasksCopy.find(t => t.id === id))
-        .filter(Boolean)
-        .filter(task => {
-          const assigned = assignedTaskMinutesOnTechnicians(task.id);
-          if (assigned > 0) {
-            partlyAssignedItems.push({ task, assigned, missing: Math.max(0, task.techTargetMin - assigned) });
-            return false;
-          }
-          return true;
-        })
-        .sort((a,b) => {
-          const durA = a.techWorkMin + a.headAlloc;
-          const durB = b.techWorkMin + b.headAlloc;
-          if (durA !== durB) return durA - durB;
-          return a.id - b.id;
-        });
-
-      for (const item of partlyAssignedItems) {
-        if (item.missing >= 15) {
-          // Kalan süre B1'in boş zamanına (veya boşalan teknisyen aralıklarına) rescueLeftoverWork ile yerleştirilmeye çalışılır.
-          finalUnallocated.push({
-            taskId: item.task.id,
-            task: item.task.name,
-            minutes: item.missing,
-            rescuable: true,
-            reason: 'Teknisyen ve B1 kapasitesi doldu; işin mümkün olan kısmı yerleştirildi, kalan kısım atanamadı'
+    // Adım 4: hedef bitişe göre sıralı, geriye doğru yerleşim. Ekip kapasitesi yetmeyen kısım diğer ekiplerin boşluklarına taşar.
+    function scheduleCrewPlan(mandatoryList, openList){
+      const grid = makeGrid();
+      const toJob = t => ({ id: t.id, task: t, units: Math.floor(t.techWorkMin / CELL) });
+      const jobs = mandatoryList.filter(t => t.techWorkMin >= CELL).map(toJob);
+      if (jobs.length) {
+        const alloc = planAllocation(jobs, grid);
+        const deadlines = computeDeadlines(jobs, naturalPass(jobs, alloc, grid));
+        const bound = j => (deadlines.has(j.id) ? deadlines.get(j.id) : GRID_K);
+        jobs.slice().sort((a, b) => bound(a) - bound(b) || b.units - a.units || a.id - b.id).forEach(j => {
+          const a = alloc.get(j.id);
+          let left = a.leftover;
+          a.parts.forEach(pt => {
+            left += pt.units - placePiece(grid, crews[pt.c], pt.units, 'bwd', bound(j), recFor(j)).placed;
           });
-        }
+          if (left > 0) {
+            const order = crews.map((_, c) => c).sort((x, y) => freeUnits(grid, crews[y]) - freeUnits(grid, crews[x]) || x - y);
+            for (const c of order) {
+              if (left <= 0) break;
+              left -= placePiece(grid, crews[c], left, 'bwd', bound(j), recFor(j)).placed;
+            }
+          }
+          if (left > 0) unallocated.push({ taskId: j.task.id, task: j.task.name, minutes: left * CELL, reason: 'Teknisyen kapasitesi doldu; mümkün olan kısım teknisyenlere dağıtıldı' });
+        });
       }
-
-      for (const task of b1OnlyCandidates) {
-        const fullB1Duration = Math.max(15, ceil15x(task.techWorkMin + task.headAlloc));
-        removeTaskFromTechnicians(task.id);
-        b1OnlyTaskIds.add(task.id);
-        const attempt = placeOnTech(headObj, fullB1Duration, task.id, task.name);
-        if (attempt) {
-          headOverflowAssignments.push({ taskId: task.id, taskName: task.name, start: attempt.start, end: attempt.end, type: 'b1Only' });
-        } else {
-          finalUnallocated.push({ taskId: task.id, task: task.name, minutes: fullB1Duration, rescuable: true, b1OnlyFull: true,
-            reason: 'B1 kapasitesi dolu olduğu için iş kimseye atanmadı' });
-        }
+      // OPEN işler zorunlu işlerden sonra, kalan boşluklara ekip halinde ve vardiya başından itibaren yerleşir.
+      const openJobs = openList.filter(t => t.techWorkMin >= CELL).map(toJob).sort((a, b) => a.units - b.units || a.id - b.id);
+      if (openJobs.length) {
+        const alloc = planAllocation(openJobs, grid);
+        openJobs.forEach(j => {
+          const a = alloc.get(j.id);
+          let left = a.leftover;
+          a.parts.forEach(pt => { left += pt.units - placePiece(grid, crews[pt.c], pt.units, 'fwd', 0, recFor(j)).placed; });
+          for (const c of crews.map((_, i) => i)) {
+            if (left <= 0) break;
+            left -= placePiece(grid, crews[c], left, 'fwd', 0, recFor(j)).placed;
+          }
+        });
       }
     }
+    // ============================================================
+    // Tek iş kartı: iş tüm personele eşit paylaştırılır.
+    // ------------------------------------------------------------
+    // Pay 15dk'lık birimlerle dağıtılır; sıradaki 15dk her zaman o işte en az
+    // süresi olana gider (manuel atanmış süre kişinin payına sayılır). İşçilik
+    // tahmini hiçbir zaman dengeleme amacıyla artırılmaz; yuvarlama ve kapasite
+    // farkları raporlanır. Herkes mümkün olduğunca aynı saatlerde birlikte çalışır.
+    // Grup modunda Teknisyen
+    // yalnızca aynı işte Supervisor'ün çalıştığı dilimleri alabilir; alamadığı
+    // pay diğer personele geçer (denetim kuralı eşitlikten önce gelir).
+    // ============================================================
+    function scheduleSingleTaskEqually(task){
+      const SLOT = 15;
+      const K = Math.floor(_workEnd_offset / SLOT);
+      const n = techObjs.length;
+      const ids = techObjs.map((_, i) => i);
+      const isSup = i => isGroup && techObjs[i].role === 'supervisor';
+      const isReg = i => isGroup && techObjs[i].role === 'regular';
+      const rank = i => isSup(i) ? 0 : isReg(i) ? 2 : 1;
+      const overlapsSlot = (s, k) => s.start < (k + 1) * SLOT && s.end > k * SLOT;
 
+      const pre = techObjs.map(t => t.segments.reduce((sum, s) => (s.locked && s.taskId === task.id) ? sum + (s.end - s.start) : sum, 0));
+      const free = techObjs.map(t => Array.from({ length: K }, (_, k) => isFreeRange(t, k * SLOT, (k + 1) * SLOT)));
+      const initialCaps = free.map(f => f.filter(Boolean).length * SLOT);
+      const work = task.isOpen
+        ? floor15(Math.max(0, Math.max(15, ceil15x(task.rawMin)) - (task.preAssignedMin || 0)))
+        : task.techWorkMin;
+
+      // Supervisor'ün manuel atamasıyla zaten denetlenen dilimler ve denetim bekleyen manuel Teknisyen dilimleri.
+      const supLockedAt = Array.from({ length: K }, (_, k) => ids.some(i => isSup(i) &&
+        techObjs[i].segments.some(s => s.locked && s.taskId === task.id && s.start <= k * SLOT && s.end >= (k + 1) * SLOT)));
+      const regLockedAt = Array.from({ length: K }, (_, k) => ids.some(i => isReg(i) &&
+        techObjs[i].segments.some(s => s.locked && s.taskId === task.id && overlapsSlot(s, k))));
+      const regFreeAt = Array.from({ length: K }, (_, k) => ids.filter(i => isReg(i) && free[i][k]).length);
+
+      // Herkes dilimleri aynı sırayla seçer ki ekip aynı saatlerde birlikte çalışsın: bu işe ait
+      // manuel atama varsa onun çevresi, yoksa vardiya başı önce gelir.
+      const anchors = [];
+      for (let k = 0; k < K; k++) if (techObjs.some(t => t.segments.some(s => s.locked && s.taskId === task.id && overlapsSlot(s, k)))) anchors.push(k);
+      const dist = k => anchors.length ? Math.min(...anchors.map(a => Math.abs(a - k))) : k;
+      const pos = new Array(K);
+      Array.from({ length: K }, (_, k) => k).sort((a, b) => dist(a) - dist(b) || a - b).forEach((k, p) => { pos[k] = p; });
+
+      function allocate(caps){
+        const add = ids.map(() => 0);
+        let rest = work;
+        while (rest >= SLOT) {
+          let best = -1;
+          for (const i of ids) {
+            if (add[i] + SLOT > caps[i]) continue;
+            const d = best < 0 ? -1 : (pre[i] + add[i]) - (pre[best] + add[best]);
+            if (d < 0 || (d === 0 && rank(i) < rank(best))) best = i;
+          }
+          if (best < 0) break;
+          add[best] += SLOT;
+          rest -= SLOT;
+        }
+        return add;
+      }
+
+      // Supervisor'ler önce denetim bekleyen manuel Teknisyen dilimlerini, sonra en çok Teknisyenin boş
+      // olduğu dilimleri alır; Kalifiyeli Supervisor'lerin çalıştığı dilimleri tercih eder, Teknisyen
+      // yalnızca bu dilimlere yerleşir.
+      function place(add){
+        const take = ids.map(() => []);
+        const covered = supLockedAt.slice();
+        for (const i of ids.slice().sort((a, b) => rank(a) - rank(b) || a - b)) {
+          const need = add[i] / SLOT;
+          if (!need) continue;
+          const slots = [];
+          for (let k = 0; k < K; k++) if (free[i][k] && (!isReg(i) || covered[k])) slots.push(k);
+          const score = isSup(i) ? (k => (regLockedAt[k] && !covered[k] ? 1000 : 0) + regFreeAt[k])
+            : isGroup ? (k => covered[k] ? 1 : 0) : (() => 0);
+          slots.sort((a, b) => score(b) - score(a) || pos[a] - pos[b]);
+          take[i] = slots.slice(0, need).sort((a, b) => a - b);
+          if (isSup(i)) take[i].forEach(k => { covered[k] = true; });
+        }
+        return take;
+      }
+
+      // Supervisor dilimleri bir Teknisyenin payına yetmezse o Teknisyenin üst sınırı düşürülür ve pay yeniden dağıtılır.
+      const caps = initialCaps.slice();
+      const supervisionLimited = ids.map(() => false);
+      let take;
+      for (let guard = 0; guard < 500; guard++) {
+        const add = allocate(caps);
+        take = place(add);
+        const short = ids.filter(i => take[i].length * SLOT < add[i]);
+        if (!short.length) break;
+        short.forEach(i => { caps[i] = take[i].length * SLOT; supervisionLimited[i] = true; });
+      }
+
+      ids.forEach(i => {
+        const runs = [];
+        take[i].forEach(k => {
+          const last = runs[runs.length - 1];
+          if (last && last[1] === k) last[1] = k + 1; else runs.push([k, k + 1]);
+        });
+        runs.forEach(([a, b]) => {
+          const start = a * SLOT, end = b * SLOT;
+          techObjs[i].segments.push({ start, end, taskId: task.id, taskName: task.name });
+          techObjs[i].totalMin += end - start;
+          taskSegments.get(task.id).push({ techIndex: i, start, end });
+        });
+      });
+
+      const placed = take.reduce((s, tk) => s + tk.length * SLOT, 0);
+      const rest = work - placed;
+      if (rest >= SLOT && !task.isOpen) {
+        unallocated.push({ taskId: task.id, task: task.name, minutes: rest, reason: 'Teknisyen kapasitesi doldu; mümkün olan kısım teknisyenlere dağıtıldı' });
+      }
+      return { task, pre, initialCaps, supervisionLimited, padded: Math.max(0, -rest),
+        target: (work + pre.reduce((s, p) => s + p, 0)) / n,
+        planned: ids.map(i => pre[i] + take[i].length * SLOT) };
+    }
+
+    // Manuel atanmış Teknisyen parçalarına, işin kalan süresinden, aynı işte ve aynı saatte
+    // boş bir Supervisor yerleştirilir; aksi halde bu parçalar denetimsiz kalıp kesilirdi.
+    // Tek iş kartında bu yerleşimi eşit paylaşım kendisi yapar.
+    if (isGroup && !singleTask) {
+      techObjs.filter(x => x.role === 'regular').forEach(reg => {
+        reg.segments.filter(s => s.locked).forEach(seg => {
+          const task = tasksCopy.find(t => t.id === seg.taskId);
+          if (!task) return;
+          for (const [gs, ge] of findGaps(seg.start, seg.end, buildSupervisorCoverage(techObjs, techRoles, seg.taskId))) {
+            let cur = gs;
+            while (cur + 15 <= ge && task.techWorkMin >= 15) {
+              const sup = techObjs.filter(s => s.role === 'supervisor' && isFreeRange(s, cur, cur + 15))
+                .sort((a, b) => a.totalMin - b.totalMin || a.index - b.index)[0];
+              if (!sup) { cur += 15; continue; }
+              let end = cur + 15;
+              while (end + 15 <= ge && end + 15 - cur <= task.techWorkMin && isFreeRange(sup, end, end + 15)) end += 15;
+              sup.segments.push({ start: cur, end, taskId: task.id, taskName: task.name });
+              sup.totalMin += end - cur;
+              task.techWorkMin -= end - cur; // Supervisor zamanı aynı işçilik bütçesinden düşülür
+              taskSegments.get(task.id).push({ techIndex: sup.index, start: cur, end });
+              cur = end;
+            }
+          }
+        });
+      });
+    }
+
+    const mandatoryTasks = tasksCopy.filter(t => !t.isOpen).sort((a, b) => b.techWorkMin - a.techWorkMin);
+    const openTasks = tasksCopy.filter(t => t.isOpen).sort((a, b) => a.techWorkMin - b.techWorkMin || a.id - b.id);
+
+    if (singleTask) {
+      equalShare = scheduleSingleTaskEqually(singleTask);
+    } else {
+      scheduleCrewPlan(mandatoryTasks, openTasks);
+    }
+    // Supervisor coverage on fixed regular-technician assignments consumes the same
+    // remaining man-hour budget as any other segment; do not add those minutes back.
     mergeAndRecompute(techObjs);
+
+    if (isGroup) repairCoverage(techObjs, techRoles);
+    mergeAndRecompute(techObjs);
+
+    if (isGroup) repairCoverage(techObjs, techRoles);
+    mergeAndRecompute(techObjs);
+
+    let taskFinalEnd = new Map();
+    let taskFinalStart = new Map();
+    function recomputeTaskTimeline(){
+      taskFinalEnd = new Map();
+      taskFinalStart = new Map();
+      for(const task of tasksCopy){
+        const actualSegments = [];
+        techObjs.forEach((tech, ti) => {
+          tech.segments.forEach(seg => {
+            if (seg.taskId === task.id) actualSegments.push({ techIndex: ti, start: seg.start, end: seg.end });
+          });
+        });
+        if(actualSegments.length === 0){
+          taskFinalEnd.set(task.id, null); taskFinalStart.set(task.id, null); continue;
+        }
+        taskFinalEnd.set(task.id, Math.max(...actualSegments.map(s => s.end)));
+        taskFinalStart.set(task.id, Math.max(...actualSegments.map(s => s.start)));
+      }
+    }
     recomputeTaskTimeline();
 
-    // ------------------------------------------------------------
-    // B1 onay planı: onay, işin bitişinde (veya sonrasında) olmalıdır. Birçok iş aynı anda
-    // biterse vardiya sonundaki B1 dilimleri yetmez ve onay işin bitişinden önceye düşer.
-    // Bu durumda işin onaydan sonraki 15 dk'lık parçaları, onaydan önceki boş bir aralıkla veya
-    // başka bir işin parçasıyla yer değiştirir; toplam işçilik, kişi yükü ve Supervisor denetimi
-    // bozulmaz. Taşınamayan iş kalırsa uyarı olarak gösterilir.
-    // ------------------------------------------------------------
-    const approvalCandidates = tasksCopy.filter(t => !t.isOpen && !b1OnlyTaskIds.has(t.id) && t.headAlloc > 0);
-    // B1'in boş dilimi tüm işlere yetmiyorsa, onaysız kalan iş teknisyenlerden de geri alınır; bu yüzden
-    // dilimler önce en çok işçilik taşıyan işlere ayrılır (en az süre kaybı).
-    const approvalJobs = [];
-    {
-      const sim = { segments: headObj.segments.map(sg => ({ ...sg })), totalMin: headObj.totalMin };
-      approvalCandidates.slice()
-        .sort((a, b) => assignedTaskMinutesOnTechnicians(b.id) - assignedTaskMinutesOnTechnicians(a.id) || a.id - b.id)
-        .forEach(t => {
-          if (placeOnTech(sim, t.headAlloc, t.id, t.name, { notBefore: 0 })) approvalJobs.push(t);
-          else headUnallocated.push({ taskId: t.id, task: t.name, minutes: t.headAlloc, reason: 'B1 kapasitesi dolu' });
-        });
-    }
+    const headOverflowAssignments = [];
+    const finalUnallocated = [];
+    const b1OnlyTaskIds = new Set();
+    const headAssignments = [];
+    const headUnallocated = [];
+    const supervisionGaps = [];
 
-    // target: B1 programı (kalıcı) ya da onun kopyası (deneme). İşler en geç bitenden başlayarak yerleşir.
-    function planApprovals(target){
-      const ordered = approvalJobs.slice().sort((a, b) => {
-        const A = taskFinalEnd.get(a.id), B = taskFinalEnd.get(b.id);
-        if (A === null && B === null) return a.id - b.id;
-        if (A === null) return 1;
-        if (B === null) return -1;
-        return B - A || a.id - b.id;
-      });
-      return ordered.map(t => {
-        const headNeeded = t.headAlloc;
-        const taskEnd = taskFinalEnd.get(t.id);
-        let attempt;
-        if (taskEnd === null) {
-          attempt = placeOnTech(target, headNeeded, t.id, t.name, { notBefore: 0 });
-        } else {
-          attempt = scheduleExactWindow(target, Math.max(0, taskEnd - headNeeded), taskEnd, t.id, t.name);
-          if (!attempt) attempt = placeOnTech(target, headNeeded, t.id, t.name, { notBefore: taskEnd });
-          if (!attempt) {
-            // Bitişten sonra yer yoksa, bitişe en yakın (en geç) boş B1 dilimi kullanılır.
-            for (let st = floor15(taskEnd - headNeeded); st >= 0 && !attempt; st -= 15) {
-              attempt = scheduleExactWindow(target, st, st + headNeeded, t.id, t.name);
-            }
-          }
-        }
-        return { task: t, taskEnd, attempt };
-      });
+    function isWindowFree(tech, start, end) {
+      if (start < 0 || end > _workEnd_offset || end <= start) return false;
+      return !tech.segments.some(seg => start < seg.end && end > seg.start);
     }
-    const approvalIsEarly = p => !!p.attempt && p.taskEnd !== null && p.attempt.end < p.taskEnd;
-
-    // Aynı işte Supervisor olmadan çalışan Teknisyen dakikalarının toplamı (yer değiştirme denetimi için).
-    function uncoveredTotal(){
-      if (!isGroup) return 0;
-      const covCache = new Map();
-      const covFor = id => { if (!covCache.has(id)) covCache.set(id, buildSupervisorCoverage(techObjs, techRoles, id)); return covCache.get(id); };
-      let total = 0;
-      techObjs.forEach((tech, i) => {
-        if (techRoles[i] !== 'regular') return;
+    function scheduleExactWindow(tech, start, end, taskId, taskName) {
+      if (!isWindowFree(tech, start, end)) return null;
+      tech.segments.push({ start, end, taskId, taskName });
+      tech.totalMin += (end - start);
+      return { start, end };
+    }
+    function tryScheduleOnTechNotBefore(tech, duration, taskId, taskName, notBeforeStart) {
+      return placeOnTech(tech, duration, taskId, taskName, { notBefore: notBeforeStart });
+    }
+    function removeTaskFromTechnicians(taskId){
+      techObjs.forEach(tech => {
+        const kept = []; let removed = 0;
         tech.segments.forEach(seg => {
-          if (seg.taskId === -1 || seg.taskId == null) return;
-          findGaps(seg.start, seg.end, covFor(seg.taskId)).forEach(([a, b]) => { total += b - a; });
+          if (seg.taskId === taskId) removed += (seg.end - seg.start);
+          else kept.push(seg);
         });
+        tech.segments = kept;
+        tech.totalMin = Math.max(0, tech.totalMin - removed);
       });
-      return total;
-    }
-    function carveSegments(tech, from, to){
-      const kept = [];
-      tech.segments.forEach(seg => {
-        if (seg.end <= from || seg.start >= to) { kept.push(seg); return; }
-        if (seg.start < from) kept.push({ ...seg, end: from });
-        if (seg.end > to) kept.push({ ...seg, start: to });
-      });
-      tech.segments = kept;
+      taskSegments.set(taskId, []);
     }
 
-    // task işinin deadline'dan sonraki 15 dk'lık parçalarını deadline'dan önceye taşır.
-    // deadlines: diğer işlerin onay bitişleri; bir parça ancak kendi onayından önce kalacak yere gidebilir.
-    function repairTail(task, deadline, deadlines){
-      let moved = false;
-      function tryMoveUnit(fromTech, a){
-        const base = uncoveredTotal();
-        const others = techObjs.filter(y => y !== fromTech).sort((p, q) => p.totalMin - q.totalMin || p.index - q.index);
-        const order = [fromTech].concat(others);
-        for (let p = deadline - 15; p >= 0; p -= 15) {
-          for (const wantFree of [true, false]) {
-            for (const toTech of order) {
-              if (toTech === fromTech && p + 15 > a) continue;
-              const hit = toTech.segments.filter(sg => sg.start < p + 15 && sg.end > p);
-              let swapSeg = null;
-              if (hit.length === 0) {
-                if (!wantFree) continue;
-              } else {
-                if (wantFree || hit.length !== 1) continue;
-                const sg = hit[0];
-                if (sg.locked || sg.taskId === -1 || sg.taskId == null || sg.taskId === task.id) continue;
-                if (sg.start > p || sg.end < p + 15) continue;
-                if (a + 15 > (deadlines.has(sg.taskId) ? deadlines.get(sg.taskId) : Infinity)) continue;
-                swapSeg = sg;
+    function assignedTaskMinutesOnTechnicians(taskId){
+      return techObjs.reduce((sum, tech) => sum + tech.segments.reduce((s, seg) => {
+        if (seg.taskId === taskId) return s + (seg.end - seg.start);
+        return s;
+      }, 0), 0);
+    }
+
+    // B1 parçaları: kind boşsa onay, 'support' = kısmen atanmış işe B1 iş desteği, 'b1only' = B1'e verilen iş.
+    // Farklı türdeki bitişik parçalar birleştirilmez; böylece onay ile iş desteği listede ayrı görünür.
+    function mergeSingleSchedule(obj){
+      if (!obj) return;
+      obj.segments.sort((a,b)=>a.start - b.start || a.end - b.end);
+      const merged = [];
+      for (const s of obj.segments) {
+        const last = merged[merged.length - 1];
+        if (last && last.taskId === s.taskId && last.end === s.start && !!last.locked === !!s.locked && (last.kind || '') === (s.kind || '')) {
+          last.end = s.end;
+        } else {
+          merged.push({...s});
+        }
+      }
+      obj.segments = merged;
+      obj.totalMin = obj.segments.reduce((sum, seg) => seg.taskId === -1 ? sum : sum + (seg.end - seg.start), 0);
+    }
+
+    let headObj = null;
+    const headSupportAssignments = [];
+
+    // ------------------------------------------------------------
+    // Kalan işi kurtarma: kapasite yüzünden atanamayan süre, hiç süre eklenmeden
+    //  1) teknisyenlerin boşalan/kalan aralıklarına (Teknisyen için aynı işte Supervisor kapsamıyla),
+    //  2) B1'in boş zamanına (iş desteği) yerleştirilmeye çalışılır.
+    // Önce işin B1 onayından önceki boşluklar denenir; olmazsa onaydan sonrası kullanılır.
+    // Küçük kalanlar önce gelir ki mümkün olduğunca çok iş tamamlansın.
+    // ------------------------------------------------------------
+    function rescueLeftoverWork(){
+      if (!headObj) return;
+      const dropFromScheduler = (taskId, minutes) => {
+        for (let i = 0; i < unallocated.length && minutes > 0; i++) {
+          const entry = unallocated[i];
+          if (entry.taskId !== taskId) continue;
+          const cut = Math.min(entry.minutes, minutes);
+          entry.minutes -= cut;
+          minutes -= cut;
+        }
+        for (let i = unallocated.length - 1; i >= 0; i--) if (unallocated[i].minutes <= 0) unallocated.splice(i, 1);
+      };
+
+      finalUnallocated.filter(u => u.rescuable && u.minutes >= 15).sort((a, b) => a.minutes - b.minutes).forEach(u => {
+        const task = tasksCopy.find(t => t.id === u.taskId);
+        if (!task || task.isOpen) return;
+        const approvalStarts = headObj.segments.filter(s => s.taskId === task.id && !s.kind).map(s => s.start);
+        const softEnd = approvalStarts.length ? Math.min(...approvalStarts) : _workEnd_offset;
+        const limits = softEnd < _workEnd_offset ? [softEnd, _workEnd_offset] : [_workEnd_offset];
+        // İşin toplamı (teknisyenler + B1) girilen tahmini aşamaz: yalnızca gerçek eksik kadar süre taşınır.
+        const placedNow = assignedTaskMinutesOnTechnicians(task.id)
+          + headObj.segments.reduce((sum, seg) => seg.taskId === task.id ? sum + (seg.end - seg.start) : sum, 0);
+        const budget = Math.max(15, ceil15x(task.techTargetMin + task.headAlloc));
+        const shortfall = Math.min(u.minutes, budget - placedNow);
+        if (shortfall < 15) return;
+        let rest = shortfall;
+        let onTechs = 0, onB1 = 0;
+
+        if (!u.b1OnlyFull) {
+          const order = techObjs.slice().sort((a, b) =>
+            (isGroup && techRoles[a.index] === 'regular') - (isGroup && techRoles[b.index] === 'regular') || a.totalMin - b.totalMin || a.index - b.index);
+          for (const limitEnd of limits) {
+            for (const tech of order) {
+              const needsCover = isGroup && techRoles[tech.index] === 'regular';
+              while (rest >= 15) {
+                const slot = findSlotBefore(tech, rest, limitEnd, needsCover ? buildSupervisorCoverage(techObjs, techRoles, task.id) : null);
+                if (!slot) break;
+                tech.segments.push({ start: slot.start, end: slot.end, taskId: task.id, taskName: task.name });
+                tech.totalMin += slot.end - slot.start;
+                rest -= slot.end - slot.start;
+                onTechs += slot.end - slot.start;
               }
-              const backupFrom = fromTech.segments, backupTo = toTech.segments;
-              const swapId = swapSeg ? swapSeg.taskId : null, swapName = swapSeg ? swapSeg.taskName : null;
-              carveSegments(fromTech, a, a + 15);
-              if (swapSeg) {
-                carveSegments(toTech, p, p + 15);
-                fromTech.segments.push({ start: a, end: a + 15, taskId: swapId, taskName: swapName });
-              } else if (toTech !== fromTech) {
-                toTech.segments = toTech.segments.slice(); // yedek dizi değiştirilmesin; geri almada özgün dizi dönülür
-              }
-              toTech.segments.push({ start: p, end: p + 15, taskId: task.id, taskName: task.name });
-              if (uncoveredTotal() <= base) return true;
-              fromTech.segments = backupFrom;
-              toTech.segments = backupTo;
             }
           }
         }
-        return false;
-      }
 
-      for (let guard = 0; guard < 400; guard++) {
-        const units = [];
-        techObjs.forEach(tech => tech.segments.forEach(seg => {
-          if (seg.taskId === task.id && !seg.locked && seg.end > deadline && seg.end - seg.start >= 15) units.push({ tech, a: seg.end - 15 });
-        }));
-        units.sort((u, v) => v.a - u.a);
-        let progressed = false;
-        for (const u of units) {
-          if (tryMoveUnit(u.tech, u.a)) { progressed = true; moved = true; break; }
+        for (const limitEnd of limits) {
+          while (rest >= 15) {
+            const slot = findSlotBefore(headObj, rest, limitEnd, null);
+            if (!slot) break;
+            const kind = u.b1OnlyFull ? 'b1only' : 'support';
+            headObj.segments.push({ start: slot.start, end: slot.end, taskId: task.id, taskName: task.name, kind });
+            headObj.totalMin += slot.end - slot.start;
+            (u.b1OnlyFull ? headOverflowAssignments : headSupportAssignments)
+              .push({ taskId: task.id, taskName: task.name, start: slot.start, end: slot.end, type: u.b1OnlyFull ? 'b1Only' : 'b1Support' });
+            rest -= slot.end - slot.start;
+            onB1 += slot.end - slot.start;
+          }
         }
-        mergeAndRecompute(techObjs);
-        if (!progressed) break;
-      }
-      return moved;
+
+        if (onTechs + onB1 > 0) {
+          mergeAndRecompute(techObjs);
+          mergeSingleSchedule(headObj);
+          dropFromScheduler(task.id, onTechs + onB1);
+          u.minutes = rest; // gerçek eksik: yerleşenden sonra kalan
+          if (rest > 0) u.reason = 'Teknisyen ve B1 kapasitesi doldu; işin mümkün olan kısmı yerleştirildi, kalan kısım atanamadı';
+        }
+      });
+      for (let i = finalUnallocated.length - 1; i >= 0; i--) if (finalUnallocated[i].rescuable && finalUnallocated[i].minutes <= 0) finalUnallocated.splice(i, 1);
     }
 
-    for (let round = 0; round < 12; round++) {
-      recomputeTaskTimeline();
-      const dry = planApprovals({ segments: headObj.segments.map(sg => ({ ...sg })), totalMin: headObj.totalMin });
-      const early = dry.filter(approvalIsEarly);
-      if (!early.length) break;
-      const deadlines = new Map(dry.filter(p => p.attempt).map(p => [p.task.id, p.attempt.end]));
-      let movedAny = false;
-      for (const p of early) if (repairTail(p.task, p.attempt.end, deadlines)) movedAny = true;
-      if (!movedAny) break;
-    }
-    recomputeTaskTimeline();
-    planApprovals(headObj).forEach(p => {
-      const t = p.task;
-      if (p.attempt) {
-        headAssignments.push({ taskId: t.id, taskName: t.name, start: p.attempt.start, end: p.attempt.end, type: 'headAlloc' });
-      } else if (p.taskEnd === null) {
-        headUnallocated.push({ taskId: t.id, task: t.name, minutes: t.headAlloc, reason: 'B1 kapasitesi dolu' });
-      } else {
-        headUnallocated.push({ taskId: t.id, task: t.name, minutes: t.headAlloc, reason: 'B1 için iş bitişiyle aynı veya sonrasında boş aralık yok' });
-      }
-    });
+    if (true) {
+      headObj = { name: headTech, segments: [], totalMin: 0 };
 
-    if (headUnallocated.length > 0) {
-      const fallbackItems = headUnallocated.splice(0)
-        .map(u => ({ ...u, taskObj: tasksCopy.find(t => t.id === u.taskId) }))
-        .filter(u => u.taskObj)
-        .sort((a,b) => {
-          const durA = Math.max(15, ceil15x(a.minutes || a.taskObj.headAlloc || 15));
-          const durB = Math.max(15, ceil15x(b.minutes || b.taskObj.headAlloc || 15));
-          if (durA !== durB) return durA - durB;
-          return a.taskObj.id - b.taskObj.id;
-        });
-      for (const item of fallbackItems) {
-        const task = item.taskObj;
-        const fallbackDuration = Math.max(15, ceil15x(item.minutes || task.headAlloc || 15));
-        const alreadyAssignedToTech = assignedTaskMinutesOnTechnicians(task.id) > 0;
-        if (!alreadyAssignedToTech) {
+      const headBlockInputs = load('asdp_headBlocks', []);
+      // B1 dolu aralıklarını da teknisyen bloklarıyla aynı mola-dostu dönüşümden geçir.
+      // Başlangıç molanın içinde olsa bile mola bitişinden sonraki doluluk korunur.
+      normalizeWorkBlocks(headBlockInputs).forEach(block => {
+        headObj.segments.push({ start: block.start, end: block.end, taskId: -1, taskName: 'DOLU' });
+      });
+
+      const unallocatedTaskIds = Array.from(new Set(unallocated
+        .map(u => Number.isFinite(u.taskId) ? u.taskId : (tasksCopy.find(t => t.name === u.task)?.id))
+        .filter(id => Number.isFinite(id) && !(tasksCopy.find(t => t.id === id)?.isOpen))));
+
+      if (unallocatedTaskIds.length > 0) {
+        const partlyAssignedItems = [];
+        const b1OnlyCandidates = unallocatedTaskIds
+          .map(id => tasksCopy.find(t => t.id === id))
+          .filter(Boolean)
+          .filter(task => {
+            const assigned = assignedTaskMinutesOnTechnicians(task.id);
+            if (assigned > 0) {
+              partlyAssignedItems.push({ task, assigned, missing: Math.max(0, task.techTargetMin - assigned) });
+              return false;
+            }
+            return true;
+          })
+          .sort((a,b) => {
+            const durA = a.techWorkMin + a.headAlloc;
+            const durB = b.techWorkMin + b.headAlloc;
+            if (durA !== durB) return durA - durB;
+            return a.id - b.id;
+          });
+
+        for (const item of partlyAssignedItems) {
+          if (item.missing >= 15) {
+            // Kalan süre B1'in boş zamanına (veya boşalan teknisyen aralıklarına) rescueLeftoverWork ile yerleştirilmeye çalışılır.
+            finalUnallocated.push({
+              taskId: item.task.id,
+              task: item.task.name,
+              minutes: item.missing,
+              rescuable: true,
+              reason: 'Teknisyen ve B1 kapasitesi doldu; işin mümkün olan kısmı yerleştirildi, kalan kısım atanamadı'
+            });
+          }
+        }
+
+        for (const task of b1OnlyCandidates) {
+          const fullB1Duration = Math.max(15, ceil15x(task.techWorkMin + task.headAlloc));
           removeTaskFromTechnicians(task.id);
           b1OnlyTaskIds.add(task.id);
-        }
-        const attempt = placeOnTech(headObj, fallbackDuration, task.id, task.name);
-        if (attempt) {
-          headOverflowAssignments.push({ taskId: task.id, taskName: task.name, start: attempt.start, end: attempt.end, type: 'b1OnlyFallback' });
-        } else {
-          finalUnallocated.push({ task: task.name, minutes: fallbackDuration, reason: 'B1’e atanamadığı için diğer teknisyenlerden de kaldırıldı' });
+          const attempt = placeOnTech(headObj, fullB1Duration, task.id, task.name);
+          if (attempt) {
+            headOverflowAssignments.push({ taskId: task.id, taskName: task.name, start: attempt.start, end: attempt.end, type: 'b1Only' });
+          } else {
+            finalUnallocated.push({ taskId: task.id, task: task.name, minutes: fullB1Duration, rescuable: true, b1OnlyFull: true,
+              reason: 'B1 kapasitesi dolu olduğu için iş kimseye atanmadı' });
+          }
         }
       }
-    }
 
-    function getOpenPool(){
-      return tasksCopy
-        .filter(t => t.isOpen && t.rawMin > 0)
-        .sort((a,b) => Math.max(15, ceil15x(a.rawMin)) - Math.max(15, ceil15x(b.rawMin)) || a.id - b.id)
-        .map(t => ({ task: t, remaining: Math.max(0, Math.max(15, ceil15x(t.rawMin)) - assignedTaskMinutesOnTechnicians(t.id)) }));
-    }
+      mergeAndRecompute(techObjs);
+      recomputeTaskTimeline();
 
-    function remainingOpenPool(pool){
-      return pool.reduce((sum, item) => sum + Math.max(0, item.remaining), 0);
-    }
+      // ------------------------------------------------------------
+      // B1 onay planı: onay, işin bitişinde (veya sonrasında) olmalıdır. Birçok iş aynı anda
+      // biterse vardiya sonundaki B1 dilimleri yetmez ve onay işin bitişinden önceye düşer.
+      // Bu durumda işin onaydan sonraki 15 dk'lık parçaları, onaydan önceki boş bir aralıkla veya
+      // başka bir işin parçasıyla yer değiştirir; toplam işçilik, kişi yükü ve Supervisor denetimi
+      // bozulmaz. Taşınamayan iş kalırsa uyarı olarak gösterilir.
+      // ------------------------------------------------------------
+      const approvalCandidates = tasksCopy.filter(t => !t.isOpen && !b1OnlyTaskIds.has(t.id) && t.headAlloc > 0);
+      // B1'in boş dilimi tüm işlere yetmiyorsa, onaysız kalan iş teknisyenlerden de geri alınır; bu yüzden
+      // dilimler önce en çok işçilik taşıyan işlere ayrılır (en az süre kaybı).
+      const approvalJobs = [];
+      {
+        const sim = { segments: headObj.segments.map(sg => ({ ...sg })), totalMin: headObj.totalMin };
+        approvalCandidates.slice()
+          .sort((a, b) => assignedTaskMinutesOnTechnicians(b.id) - assignedTaskMinutesOnTechnicians(a.id) || a.id - b.id)
+          .forEach(t => {
+            if (placeOnTech(sim, t.headAlloc, t.id, t.name, { notBefore: 0 })) approvalJobs.push(t);
+            else headUnallocated.push({ taskId: t.id, task: t.name, minutes: t.headAlloc, reason: 'B1 kapasitesi dolu' });
+          });
+      }
 
-    function nextOpenItem(pool){
-      return pool.find(item => item.remaining >= 15) || null;
-    }
-
-    function findOpenSlotForTarget(target, taskId){
-      const free = getFreeIntervals(target.obj);
-      for (let i = free.length - 1; i >= 0; i--) {
-        const [fs, fe] = free[i];
-        let cursor = floor15(fe) - 15;
-        while (cursor >= fs) {
-          if (isGroup && target.role === 'regular') {
-            const coverage = buildSupervisorCoverage(techObjs, techRoles, taskId);
-            const ok = coverage.some(([cs, ce]) => cursor >= cs && (cursor + 15) <= ce);
-            if (!ok) { cursor -= 15; continue; }
+      // target: B1 programı (kalıcı) ya da onun kopyası (deneme). İşler en geç bitenden başlayarak yerleşir.
+      function planApprovals(target){
+        const ordered = approvalJobs.slice().sort((a, b) => {
+          const A = taskFinalEnd.get(a.id), B = taskFinalEnd.get(b.id);
+          if (A === null && B === null) return a.id - b.id;
+          if (A === null) return 1;
+          if (B === null) return -1;
+          return B - A || a.id - b.id;
+        });
+        return ordered.map(t => {
+          const headNeeded = t.headAlloc;
+          const taskEnd = taskFinalEnd.get(t.id);
+          let attempt;
+          if (taskEnd === null) {
+            attempt = placeOnTech(target, headNeeded, t.id, t.name, { notBefore: 0 });
+          } else {
+            attempt = scheduleExactWindow(target, Math.max(0, taskEnd - headNeeded), taskEnd, t.id, t.name);
+            if (!attempt) attempt = placeOnTech(target, headNeeded, t.id, t.name, { notBefore: taskEnd });
+            if (!attempt) {
+              // Bitişten sonra yer yoksa, bitişe en yakın (en geç) boş B1 dilimi kullanılır.
+              for (let st = floor15(taskEnd - headNeeded); st >= 0 && !attempt; st -= 15) {
+                attempt = scheduleExactWindow(target, st, st + headNeeded, t.id, t.name);
+              }
+            }
           }
-          return { start: cursor, end: cursor + 15 };
+          return { task: t, taskEnd, attempt };
+        });
+      }
+      const approvalIsEarly = p => !!p.attempt && p.taskEnd !== null && p.attempt.end < p.taskEnd;
+
+      // Aynı işte Supervisor olmadan çalışan Teknisyen dakikalarının toplamı (yer değiştirme denetimi için).
+      function uncoveredTotal(){
+        if (!isGroup) return 0;
+        const covCache = new Map();
+        const covFor = id => { if (!covCache.has(id)) covCache.set(id, buildSupervisorCoverage(techObjs, techRoles, id)); return covCache.get(id); };
+        let total = 0;
+        techObjs.forEach((tech, i) => {
+          if (techRoles[i] !== 'regular') return;
+          tech.segments.forEach(seg => {
+            if (seg.taskId === -1 || seg.taskId == null) return;
+            findGaps(seg.start, seg.end, covFor(seg.taskId)).forEach(([a, b]) => { total += b - a; });
+          });
+        });
+        return total;
+      }
+      function carveSegments(tech, from, to){
+        const kept = [];
+        tech.segments.forEach(seg => {
+          if (seg.end <= from || seg.start >= to) { kept.push(seg); return; }
+          if (seg.start < from) kept.push({ ...seg, end: from });
+          if (seg.end > to) kept.push({ ...seg, start: to });
+        });
+        tech.segments = kept;
+      }
+
+      // task işinin deadline'dan sonraki 15 dk'lık parçalarını deadline'dan önceye taşır.
+      // deadlines: diğer işlerin onay bitişleri; bir parça ancak kendi onayından önce kalacak yere gidebilir.
+      function repairTail(task, deadline, deadlines){
+        let moved = false;
+        function tryMoveUnit(fromTech, a){
+          const base = uncoveredTotal();
+          const others = techObjs.filter(y => y !== fromTech).sort((p, q) => p.totalMin - q.totalMin || p.index - q.index);
+          const order = [fromTech].concat(others);
+          for (let p = deadline - 15; p >= 0; p -= 15) {
+            for (const wantFree of [true, false]) {
+              for (const toTech of order) {
+                if (toTech === fromTech && p + 15 > a) continue;
+                const hit = toTech.segments.filter(sg => sg.start < p + 15 && sg.end > p);
+                let swapSeg = null;
+                if (hit.length === 0) {
+                  if (!wantFree) continue;
+                } else {
+                  if (wantFree || hit.length !== 1) continue;
+                  const sg = hit[0];
+                  if (sg.locked || sg.taskId === -1 || sg.taskId == null || sg.taskId === task.id) continue;
+                  if (sg.start > p || sg.end < p + 15) continue;
+                  if (a + 15 > (deadlines.has(sg.taskId) ? deadlines.get(sg.taskId) : Infinity)) continue;
+                  swapSeg = sg;
+                }
+                const backupFrom = fromTech.segments, backupTo = toTech.segments;
+                const swapId = swapSeg ? swapSeg.taskId : null, swapName = swapSeg ? swapSeg.taskName : null;
+                carveSegments(fromTech, a, a + 15);
+                if (swapSeg) {
+                  carveSegments(toTech, p, p + 15);
+                  fromTech.segments.push({ start: a, end: a + 15, taskId: swapId, taskName: swapName });
+                } else if (toTech !== fromTech) {
+                  toTech.segments = toTech.segments.slice(); // yedek dizi değiştirilmesin; geri almada özgün dizi dönülür
+                }
+                toTech.segments.push({ start: p, end: p + 15, taskId: task.id, taskName: task.name });
+                if (uncoveredTotal() <= base) return true;
+                fromTech.segments = backupFrom;
+                toTech.segments = backupTo;
+              }
+            }
+          }
+          return false;
+        }
+
+        for (let guard = 0; guard < 400; guard++) {
+          const units = [];
+          techObjs.forEach(tech => tech.segments.forEach(seg => {
+            if (seg.taskId === task.id && !seg.locked && seg.end > deadline && seg.end - seg.start >= 15) units.push({ tech, a: seg.end - 15 });
+          }));
+          units.sort((u, v) => v.a - u.a);
+          let progressed = false;
+          for (const u of units) {
+            if (tryMoveUnit(u.tech, u.a)) { progressed = true; moved = true; break; }
+          }
+          mergeAndRecompute(techObjs);
+          if (!progressed) break;
+        }
+        return moved;
+      }
+
+      for (let round = 0; round < 12; round++) {
+        recomputeTaskTimeline();
+        const dry = planApprovals({ segments: headObj.segments.map(sg => ({ ...sg })), totalMin: headObj.totalMin });
+        const early = dry.filter(approvalIsEarly);
+        if (!early.length) break;
+        const deadlines = new Map(dry.filter(p => p.attempt).map(p => [p.task.id, p.attempt.end]));
+        let movedAny = false;
+        for (const p of early) if (repairTail(p.task, p.attempt.end, deadlines)) movedAny = true;
+        if (!movedAny) break;
+      }
+      recomputeTaskTimeline();
+      planApprovals(headObj).forEach(p => {
+        const t = p.task;
+        if (p.attempt) {
+          headAssignments.push({ taskId: t.id, taskName: t.name, start: p.attempt.start, end: p.attempt.end, type: 'headAlloc' });
+        } else if (p.taskEnd === null) {
+          headUnallocated.push({ taskId: t.id, task: t.name, minutes: t.headAlloc, reason: 'B1 kapasitesi dolu' });
+        } else {
+          headUnallocated.push({ taskId: t.id, task: t.name, minutes: t.headAlloc, reason: 'B1 için iş bitişiyle aynı veya sonrasında boş aralık yok' });
+        }
+      });
+
+      if (headUnallocated.length > 0) {
+        const fallbackItems = headUnallocated.splice(0)
+          .map(u => ({ ...u, taskObj: tasksCopy.find(t => t.id === u.taskId) }))
+          .filter(u => u.taskObj)
+          .sort((a,b) => {
+            const durA = Math.max(15, ceil15x(a.minutes || a.taskObj.headAlloc || 15));
+            const durB = Math.max(15, ceil15x(b.minutes || b.taskObj.headAlloc || 15));
+            if (durA !== durB) return durA - durB;
+            return a.taskObj.id - b.taskObj.id;
+          });
+        for (const item of fallbackItems) {
+          const task = item.taskObj;
+          const fallbackDuration = Math.max(15, ceil15x(item.minutes || task.headAlloc || 15));
+          const alreadyAssignedToTech = assignedTaskMinutesOnTechnicians(task.id) > 0;
+          if (!alreadyAssignedToTech) {
+            removeTaskFromTechnicians(task.id);
+            b1OnlyTaskIds.add(task.id);
+          }
+          const attempt = placeOnTech(headObj, fallbackDuration, task.id, task.name);
+          if (attempt) {
+            headOverflowAssignments.push({ taskId: task.id, taskName: task.name, start: attempt.start, end: attempt.end, type: 'b1OnlyFallback' });
+          } else {
+            finalUnallocated.push({ task: task.name, minutes: fallbackDuration, reason: 'B1’e atanamadığı için diğer teknisyenlerden de kaldırıldı' });
+          }
+        }
+      }
+
+      function getOpenPool(){
+        return tasksCopy
+          .filter(t => t.isOpen && t.rawMin > 0)
+          .sort((a,b) => Math.max(15, ceil15x(a.rawMin)) - Math.max(15, ceil15x(b.rawMin)) || a.id - b.id)
+          .map(t => ({ task: t, remaining: Math.max(0, Math.max(15, ceil15x(t.rawMin)) - assignedTaskMinutesOnTechnicians(t.id)) }));
+      }
+
+      function remainingOpenPool(pool){
+        return pool.reduce((sum, item) => sum + Math.max(0, item.remaining), 0);
+      }
+
+      function nextOpenItem(pool){
+        return pool.find(item => item.remaining >= 15) || null;
+      }
+
+      function findOpenSlotForTarget(target, taskId){
+        const free = getFreeIntervals(target.obj);
+        for (let i = free.length - 1; i >= 0; i--) {
+          const [fs, fe] = free[i];
+          let cursor = floor15(fe) - 15;
+          while (cursor >= fs) {
+            if (isGroup && target.role === 'regular') {
+              const coverage = buildSupervisorCoverage(techObjs, techRoles, taskId);
+              const ok = coverage.some(([cs, ce]) => cursor >= cs && (cursor + 15) <= ce);
+              if (!ok) { cursor -= 15; continue; }
+            }
+            return { start: cursor, end: cursor + 15 };
+          }
+        }
+        return null;
+      }
+
+      function fillAllOpenGapsFromPool(){
+        const pool = getOpenPool();
+        let guard = 0;
+        while (remainingOpenPool(pool) >= 15 && guard < 20000) {
+          guard++;
+          const targets = techObjs.map(t => ({ obj: t, role: isGroup ? (techRoles[t.index] || 'regular') : 'all', isHead:false }))
+            .concat([{ obj: headObj, role:'head', isHead:true }])
+            .sort((a,b) => {
+              const aFree = getFreeIntervals(a.obj).reduce((s,[x,y]) => s + (y-x), 0);
+              const bFree = getFreeIntervals(b.obj).reduce((s,[x,y]) => s + (y-x), 0);
+              if ((a.obj.totalMin || 0) !== (b.obj.totalMin || 0)) return (a.obj.totalMin || 0) - (b.obj.totalMin || 0);
+              return bFree - aFree;
+            });
+
+          let placed = false;
+          for (const target of targets) {
+            const item = nextOpenItem(pool);
+            if (!item) break;
+            const slot = findOpenSlotForTarget(target, item.task.id);
+            if (!slot) continue;
+            target.obj.segments.push({ start: slot.start, end: slot.end, taskId: item.task.id, taskName: item.task.name });
+            target.obj.totalMin = (target.obj.totalMin || 0) + 15;
+            if (target.isHead) {
+              headAssignments.push({ taskId: item.task.id, taskName: item.task.name, start: slot.start, end: slot.end, type: 'openB1Fill' });
+            } else {
+              const arr = taskSegments.get(item.task.id) || [];
+              arr.push({ techIndex: target.obj.index, start: slot.start, end: slot.end });
+              taskSegments.set(item.task.id, arr);
+            }
+            item.remaining -= 15;
+            placed = true;
+            break;
+          }
+          if (!placed) break;
+          mergeAndRecompute(techObjs);
+          mergeSingleSchedule(headObj);
+          if (isGroup) repairCoverage(techObjs, techRoles);
+        }
+        mergeAndRecompute(techObjs);
+        mergeSingleSchedule(headObj);
+        return pool;
+      }
+
+      // Zorunlu işlerin kalan süresi, OPEN dolgudan önce B1'in/teknisyenlerin boş zamanına verilir.
+      rescueLeftoverWork();
+
+      const openPoolAfterFill = fillAllOpenGapsFromPool();
+      // OPEN work is best-effort fill, but any residual must be visible rather than silently dropped.
+      openPoolAfterFill.filter(item => item.remaining > 0).forEach(item => {
+        finalUnallocated.push({
+          taskId: item.task.id,
+          task: item.task.name,
+          minutes: item.remaining,
+          reason: item.remaining < 15
+            ? 'Kalan OPEN süre 15 dakikalık planlama birimine sığmadı; süre artırılmadı'
+            : 'OPEN işin kalan süresi kullanılabilir boş aralıklara sığmadı'
+        });
+      });
+
+      const taskIdsWithB1 = new Set(headObj.segments.filter(s => s.taskId !== -1 && s.taskId != null && s.kind !== 'support').map(s => s.taskId));
+      const removedByB1Rule = new Set();
+      techObjs.forEach(tech => {
+        const kept = [];
+        for (const seg of tech.segments) {
+          if (seg.taskId === -1 || seg.taskId == null || seg.locked || taskIdsWithB1.has(seg.taskId) || (tasksCopy.find(t => t.id === seg.taskId)?.isOpen)) kept.push(seg);
+          else removedByB1Rule.add(seg.taskId);
+        }
+        tech.segments = kept;
+        tech.totalMin = tech.segments.reduce((sum, seg) => seg.taskId === -1 ? sum : sum + (seg.end - seg.start), 0);
+      });
+      removedByB1Rule.forEach(taskId => {
+        const task = tasksCopy.find(t => t.id === taskId);
+        if (task && !finalUnallocated.some(u => u.task === task.name)) {
+          finalUnallocated.push({ task: task.name, minutes: Math.max(15, ceil15x(task.headAlloc || 15)),
+            reason: 'B1’e atanmadığı için diğer teknisyenlere de atanmadı' });
+        }
+      });
+
+      mergeAndRecompute(techObjs);
+      recomputeTaskTimeline();
+    }
+
+    // ============================================================
+    // KESİN DENETİM KURALI: Teknisyen hiçbir şartta denetimsiz çalışamaz.
+    // Önceki aşamalar (manuel atamalar, B1 kuralıyla geri alınan işler vb.)
+    // Supervisor kapsamı dışında Teknisyen dakikası bırakmışsa o dakikalar
+    // kesilir; kesilen iş Supervisor/Kalifiyeli'ye ya da kapsam içindeki bir
+    // Teknisyene taşınır, yer yoksa atanamayan olarak raporlanır.
+    // ============================================================
+    function findSlotBefore(tech, maxDur, limitEnd, coverage){
+      for (const [fs, fe0] of getFreeIntervals(tech)) {
+        const fe = Math.min(fe0, limitEnd);
+        const windows = coverage ? coverage.map(([cs, ce]) => [Math.max(fs, cs), Math.min(fe, ce)]) : [[fs, fe]];
+        for (const [ws, we] of windows) {
+          const len = Math.min(maxDur, floor15(we - ws));
+          if (len >= 15) return { start: ws, end: ws + len };
         }
       }
       return null;
     }
-
-    function fillAllOpenGapsFromPool(){
-      const pool = getOpenPool();
-      let guard = 0;
-      while (remainingOpenPool(pool) >= 15 && guard < 20000) {
-        guard++;
-        const targets = techObjs.map(t => ({ obj: t, role: isGroup ? (techRoles[t.index] || 'regular') : 'all', isHead:false }))
-          .concat([{ obj: headObj, role:'head', isHead:true }])
-          .sort((a,b) => {
-            const aFree = getFreeIntervals(a.obj).reduce((s,[x,y]) => s + (y-x), 0);
-            const bFree = getFreeIntervals(b.obj).reduce((s,[x,y]) => s + (y-x), 0);
-            if ((a.obj.totalMin || 0) !== (b.obj.totalMin || 0)) return (a.obj.totalMin || 0) - (b.obj.totalMin || 0);
-            return bFree - aFree;
-          });
-
-        let placed = false;
-        for (const target of targets) {
-          const item = nextOpenItem(pool);
-          if (!item) break;
-          const slot = findOpenSlotForTarget(target, item.task.id);
-          if (!slot) continue;
-          target.obj.segments.push({ start: slot.start, end: slot.end, taskId: item.task.id, taskName: item.task.name });
-          target.obj.totalMin = (target.obj.totalMin || 0) + 15;
-          if (target.isHead) {
-            headAssignments.push({ taskId: item.task.id, taskName: item.task.name, start: slot.start, end: slot.end, type: 'openB1Fill' });
-          } else {
-            const arr = taskSegments.get(item.task.id) || [];
-            arr.push({ techIndex: target.obj.index, start: slot.start, end: slot.end });
-            taskSegments.set(item.task.id, arr);
+    function enforceSupervision(){
+      // repairCoverage burada çağrılmaz: B1 onayı planlanmış işleri onaydan sonraya taşıyabilir.
+      const covByTask = new Map();
+      const covFor = taskId => {
+        if (!covByTask.has(taskId)) covByTask.set(taskId, buildSupervisorCoverage(techObjs, techRoles, taskId));
+        return covByTask.get(taskId);
+      };
+      const cutMinutes = new Map();
+      techObjs.forEach((tech, idx) => {
+        if (techRoles[idx] !== 'regular') return;
+        const kept = [];
+        tech.segments.forEach(seg => {
+          if (seg.taskId === -1 || seg.taskId == null) { kept.push(seg); return; }
+          const gaps = findGaps(seg.start, seg.end, covFor(seg.taskId));
+          if (gaps.length === 0) { kept.push(seg); return; }
+          let cursor = seg.start;
+          for (const [gs, ge] of gaps) {
+            if (gs > cursor) kept.push({ ...seg, start: cursor, end: gs });
+            cursor = ge;
           }
-          item.remaining -= 15;
-          placed = true;
-          break;
-        }
-        if (!placed) break;
-        mergeAndRecompute(techObjs);
-        mergeSingleSchedule(headObj);
-        if (isGroup) repairCoverage(techObjs, techRoles);
-      }
+          if (cursor < seg.end) kept.push({ ...seg, start: cursor, end: seg.end });
+          cutMinutes.set(seg.taskId, (cutMinutes.get(seg.taskId) || 0) + gaps.reduce((s, [gs, ge]) => s + (ge - gs), 0));
+          if (seg.locked) {
+            const gapStr = gaps.map(([gs, ge]) => `${m2t(workToReal(gs, 'start'))}-${m2t(workToReal(ge, 'end'))}`).join(', ');
+            scenarioWarnings.push(`${escHtml(tech.name)} – ${escHtml(seg.taskName)}: ${gapStr} arasında bu işte çalışan Supervisor yok; denetimsiz kısım uygulanmadı.`);
+          }
+        });
+        tech.segments = kept;
+      });
       mergeAndRecompute(techObjs);
-      mergeSingleSchedule(headObj);
-      return pool;
+
+      cutMinutes.forEach((minutes, taskId) => {
+        const task = tasksCopy.find(t => t.id === taskId);
+        if (!task || task.isOpen) return; // OPEN dolgu işidir; kesilen kısım yeniden dağıtılmaz
+        // İş, B1 onayından sonra bitmesin.
+        const approvalStarts = headObj ? headObj.segments.filter(s => s.taskId === taskId && !s.kind).map(s => s.start) : [];
+        const limitEnd = approvalStarts.length ? Math.min(...approvalStarts) : _workEnd_offset;
+        let rest = minutes;
+        const order = techObjs.slice().sort((a, b) =>
+          (techRoles[a.index] === 'regular') - (techRoles[b.index] === 'regular') || a.totalMin - b.totalMin);
+        for (const tech of order) {
+          const isRegular = techRoles[tech.index] === 'regular';
+          while (rest >= 15) {
+            const slot = findSlotBefore(tech, rest, limitEnd, isRegular ? buildSupervisorCoverage(techObjs, techRoles, taskId) : null);
+            if (!slot) break;
+            tech.segments.push({ start: slot.start, end: slot.end, taskId, taskName: task.name });
+            tech.totalMin += slot.end - slot.start;
+            rest -= slot.end - slot.start;
+          }
+          if (rest < 15) break;
+        }
+        if (rest > 0) finalUnallocated.push({ taskId, task: task.name, minutes: rest, rescuable: true, reason: 'Bu işte Supervisor çalışmayan saatlere denk geldiği için Teknisyene verilemedi ve başka kimseye sığmadı' });
+      });
+      mergeAndRecompute(techObjs);
+    }
+    if (isGroup) {
+      enforceSupervision();
+      rescueLeftoverWork();
     }
 
-    // Zorunlu işlerin kalan süresi, OPEN dolgudan önce B1'in/teknisyenlerin boş zamanına verilir.
-    rescueLeftoverWork();
+    // Teknisyen parçalarını, onları denetleyen Supervisor parçalarıyla birebir aynı aralığa getir.
+    if (isGroup) alignSupervisionPieces(techObjs, techRoles);
 
-    const openPoolAfterFill = fillAllOpenGapsFromPool();
-    // OPEN work is best-effort fill, but any residual must be visible rather than silently dropped.
-    openPoolAfterFill.filter(item => item.remaining > 0).forEach(item => {
-      finalUnallocated.push({
-        taskId: item.task.id,
-        task: item.task.name,
-        minutes: item.remaining,
-        reason: item.remaining < 15
-          ? 'Kalan OPEN süre 15 dakikalık planlama birimine sığmadı; süre artırılmadı'
-          : 'OPEN işin kalan süresi kullanılabilir boş aralıklara sığmadı'
+    if (isGroup) {
+      techObjs.forEach((tech, idx) => {
+        if (techRoles[idx] !== 'regular') return;
+        tech.segments.forEach(seg => {
+          if (seg.taskId === -1) return;
+          const attr = attributeSupervision(seg.start, seg.end, techObjs, techRoles, technicians, seg.taskId);
+          if (!attr.fullyCovered) {
+            supervisionGaps.push({
+              techName: tech.name,
+              taskName: seg.taskName,
+              from: workToReal(attr.uncoveredFrom, 'start'),
+              to: workToReal(seg.end, 'end')
+            });
+          }
+        });
       });
-    });
+    }
 
-    const taskIdsWithB1 = new Set(headObj.segments.filter(s => s.taskId !== -1 && s.taskId != null && s.kind !== 'support').map(s => s.taskId));
-    const removedByB1Rule = new Set();
-    techObjs.forEach(tech => {
-      const kept = [];
-      for (const seg of tech.segments) {
-        if (seg.taskId === -1 || seg.taskId == null || seg.locked || taskIdsWithB1.has(seg.taskId) || (tasksCopy.find(t => t.id === seg.taskId)?.isOpen)) kept.push(seg);
-        else removedByB1Rule.add(seg.taskId);
-      }
-      tech.segments = kept;
-      tech.totalMin = tech.segments.reduce((sum, seg) => seg.taskId === -1 ? sum : sum + (seg.end - seg.start), 0);
-    });
-    removedByB1Rule.forEach(taskId => {
-      const task = tasksCopy.find(t => t.id === taskId);
-      if (task && !finalUnallocated.some(u => u.task === task.name)) {
-        finalUnallocated.push({ task: task.name, minutes: Math.max(15, ceil15x(task.headAlloc || 15)),
-          reason: 'B1’e atanmadığı için diğer teknisyenlere de atanmadı' });
-      }
-    });
-
-    mergeAndRecompute(techObjs);
+    // Son plana göre: onayı işin son çalışma saatinden önce kalan işler (B1'de uygun boş zaman bulunamadı).
     recomputeTaskTimeline();
-  }
-
-  // ============================================================
-  // KESİN DENETİM KURALI: Teknisyen hiçbir şartta denetimsiz çalışamaz.
-  // Önceki aşamalar (manuel atamalar, B1 kuralıyla geri alınan işler vb.)
-  // Supervisor kapsamı dışında Teknisyen dakikası bırakmışsa o dakikalar
-  // kesilir; kesilen iş Supervisor/Kalifiyeli'ye ya da kapsam içindeki bir
-  // Teknisyene taşınır, yer yoksa atanamayan olarak raporlanır.
-  // ============================================================
-  function findSlotBefore(tech, maxDur, limitEnd, coverage){
-    for (const [fs, fe0] of getFreeIntervals(tech)) {
-      const fe = Math.min(fe0, limitEnd);
-      const windows = coverage ? coverage.map(([cs, ce]) => [Math.max(fs, cs), Math.min(fe, ce)]) : [[fs, fe]];
-      for (const [ws, we] of windows) {
-        const len = Math.min(maxDur, floor15(we - ws));
-        if (len >= 15) return { start: ws, end: ws + len };
-      }
-    }
-    return null;
-  }
-  function enforceSupervision(){
-    // repairCoverage burada çağrılmaz: B1 onayı planlanmış işleri onaydan sonraya taşıyabilir.
-    const covByTask = new Map();
-    const covFor = taskId => {
-      if (!covByTask.has(taskId)) covByTask.set(taskId, buildSupervisorCoverage(techObjs, techRoles, taskId));
-      return covByTask.get(taskId);
-    };
-    const cutMinutes = new Map();
-    techObjs.forEach((tech, idx) => {
-      if (techRoles[idx] !== 'regular') return;
-      const kept = [];
-      tech.segments.forEach(seg => {
-        if (seg.taskId === -1 || seg.taskId == null) { kept.push(seg); return; }
-        const gaps = findGaps(seg.start, seg.end, covFor(seg.taskId));
-        if (gaps.length === 0) { kept.push(seg); return; }
-        let cursor = seg.start;
-        for (const [gs, ge] of gaps) {
-          if (gs > cursor) kept.push({ ...seg, start: cursor, end: gs });
-          cursor = ge;
-        }
-        if (cursor < seg.end) kept.push({ ...seg, start: cursor, end: seg.end });
-        cutMinutes.set(seg.taskId, (cutMinutes.get(seg.taskId) || 0) + gaps.reduce((s, [gs, ge]) => s + (ge - gs), 0));
-        if (seg.locked) {
-          const gapStr = gaps.map(([gs, ge]) => `${m2t(workToReal(gs, 'start'))}-${m2t(workToReal(ge, 'end'))}`).join(', ');
-          preAssignWarnings.push(`${escHtml(tech.name)} – ${escHtml(seg.taskName)}: ${gapStr} arasında bu işte çalışan Supervisor yok; denetimsiz kısım uygulanmadı.`);
-        }
+    const earlyApprovals = [];
+    if (headObj) {
+      tasksCopy.filter(t => !t.isOpen && !b1OnlyTaskIds.has(t.id)).forEach(t => {
+        const approvals = headObj.segments.filter(sg => sg.taskId === t.id && !sg.kind);
+        const taskEnd = taskFinalEnd.get(t.id);
+        if (!approvals.length || taskEnd === null || taskEnd === undefined) return;
+        const last = approvals.reduce((a, b) => (b.end > a.end ? b : a));
+        if (last.end < taskEnd) earlyApprovals.push({ taskName: t.name, from: last.start, to: last.end, taskEnd });
       });
-      tech.segments = kept;
-    });
-    mergeAndRecompute(techObjs);
-
-    cutMinutes.forEach((minutes, taskId) => {
-      const task = tasksCopy.find(t => t.id === taskId);
-      if (!task || task.isOpen) return; // OPEN dolgu işidir; kesilen kısım yeniden dağıtılmaz
-      // İş, B1 onayından sonra bitmesin.
-      const approvalStarts = headObj ? headObj.segments.filter(s => s.taskId === taskId && !s.kind).map(s => s.start) : [];
-      const limitEnd = approvalStarts.length ? Math.min(...approvalStarts) : _workEnd_offset;
-      let rest = minutes;
-      const order = techObjs.slice().sort((a, b) =>
-        (techRoles[a.index] === 'regular') - (techRoles[b.index] === 'regular') || a.totalMin - b.totalMin);
-      for (const tech of order) {
-        const isRegular = techRoles[tech.index] === 'regular';
-        while (rest >= 15) {
-          const slot = findSlotBefore(tech, rest, limitEnd, isRegular ? buildSupervisorCoverage(techObjs, techRoles, taskId) : null);
-          if (!slot) break;
-          tech.segments.push({ start: slot.start, end: slot.end, taskId, taskName: task.name });
-          tech.totalMin += slot.end - slot.start;
-          rest -= slot.end - slot.start;
-        }
-        if (rest < 15) break;
-      }
-      if (rest > 0) finalUnallocated.push({ taskId, task: task.name, minutes: rest, rescuable: true, reason: 'Bu işte Supervisor çalışmayan saatlere denk geldiği için Teknisyene verilemedi ve başka kimseye sığmadı' });
-    });
-    mergeAndRecompute(techObjs);
-  }
-  if (isGroup) {
-    enforceSupervision();
-    rescueLeftoverWork();
-  }
-
-  // Teknisyen parçalarını, onları denetleyen Supervisor parçalarıyla birebir aynı aralığa getir.
-  if (isGroup) alignSupervisionPieces(techObjs, techRoles);
-
-  if (isGroup) {
-    techObjs.forEach((tech, idx) => {
-      if (techRoles[idx] !== 'regular') return;
-      tech.segments.forEach(seg => {
-        if (seg.taskId === -1) return;
-        const attr = attributeSupervision(seg.start, seg.end, techObjs, techRoles, technicians, seg.taskId);
-        if (!attr.fullyCovered) {
-          supervisionGaps.push({
-            techName: tech.name,
-            taskName: seg.taskName,
-            from: workToReal(attr.uncoveredFrom, 'start'),
-            to: workToReal(seg.end, 'end')
-          });
-        }
-      });
-    });
-  }
-
-  // ============================================================
-  // RENDER
-  // ============================================================
-  const perTech = technicians.map((n, idx) => ({
-    name: n,
-    role: isGroup ? (techRoles[idx] || 'regular') : 'all',
-    segs: [], total: 0
-  }));
-  techObjs.forEach((t, idx) => {
-    t.segments.forEach(s => {
-      if (s.taskId == null || s.taskId === -1) return;
-      const real = { startReal: workToReal(s.start, 'start'), endReal: workToReal(s.end, 'end') };
-      perTech[idx].segs.push({ taskId: s.taskId, task: tasks[s.taskId].name, start: real.startReal, end: real.endReal, _ws: s.start, _we: s.end, locked: !!s.locked });
-      let segmentDuration = real.endReal - real.startReal;
-      for (const b of _breaks) {
-        if (real.startReal < b.e && real.endReal > b.s) {
-          const overlapStart = Math.max(real.startReal, b.s);
-          const overlapEnd = Math.min(real.endReal, b.e);
-          segmentDuration -= Math.max(0, overlapEnd - overlapStart);
-        }
-      }
-      perTech[idx].total += segmentDuration;
-    });
-  });
-
-  let html = '';
-  const totalInputHours = tasks.reduce((s,t)=>s + (parseFloat(t.hours)||0),0);
-  html += `<div class="card"><div class="small">Mod: <strong>${isGroup ? 'Supervisor Grup' : 'Supervisor ALL'}</strong> – Algoritma: <strong>${algoMode === 'tech_priority' ? 'Teknisyen Öncelikli' : 'B1 Öncelikli'}</strong> – Toplam İş: <strong>${tasks.length}</strong> – Girdi Toplam Süre: <strong>${totalInputHours.toFixed(2)} saat</strong></div></div>`;
-
-  // Capacity table
-  const busyRows = technicians.map((name, i) => {
-    const busyH = minutesToHoursStr(techBusyMinutes[i] || 0);
-    const freeH = minutesToHoursStr(techFreeCapacities[i] || 0);
-    const role = isGroup ? `<span class="role-tag ${techRoles[i] || 'regular'}">${techRoles[i] === 'supervisor' ? 'Supervisor' : techRoles[i] === 'qualified' ? 'Kalifiyeli' : 'Teknisyen'}</span>` : '';
-    const preH = minutesToHoursStr(techPreAssignMinutes[i] || 0);
-    return `<tr><td><strong>${escHtml(name)}</strong>${role}</td><td>${busyH}</td><td>${preH}</td><td>${freeH}</td></tr>`;
-  }).join('');
-  html += `<details class="collapsible" open><summary>⏱️ Teknisyen Net Kapasite Kontrolü</summary><div class="body">
-    <div class="small" style="color:var(--muted);margin-bottom:8px">Dolu saatler iş ataması için kapalıdır ve toplam yüke eklenmez.</div>
-    <table class="table"><tr><th>Teknisyen</th><th>Dolu Blok</th><th>Manuel İş</th><th>Otomatik Atamaya Kalan</th></tr>${busyRows}</table>
-  </div></details>`;
-
-  if (preAssignWarnings.length > 0) {
-    html += `<div class="warning"><strong>📌 Uygulanamayan Manuel Atamalar</strong><br>${preAssignWarnings.map(w => `<div class="small">• ${w}</div>`).join('')}</div>`;
-  }
-
-  if (manualOverAssignmentWarnings.length > 0) {
-    html += `<div class="attention"><strong>📌 Manuel atama işçilik hedefini aşıyor</strong>${manualOverAssignmentWarnings.map(w => `<div class="small">• ${w}</div>`).join('')}</div>`;
-  }
-
-  // Kapasite yetmiyorsa süreleri değiştirmek yerine açık kapasite açığını göster.
-  if (capacityExceeded) {
-    const capHours = (totalCapacityMin / 60).toFixed(2);
-    const needHours = (mandatoryAfterRound / 60).toFixed(2);
-    const deficitHours = ((mandatoryAfterRound - totalCapacityMin) / 60).toFixed(2);
-    let detailHtml = '<table class="table" style="margin-top:10px"><tr><th>İş</th><th>Planlama işçilik talebi</th><th>Manuel atama</th></tr>';
-    tasksCopy.filter(t => !t.isOpen && t.techWorkMinOriginal > 0).forEach(task => {
-      detailHtml += `<tr><td><strong>${escHtml(task.name)}</strong></td><td>${(task.techWorkMin / 60).toFixed(2)} saat</td><td>${((task.preAssignedMin || 0) / 60).toFixed(2)} saat</td></tr>`;
-    });
-    detailHtml += '</table>';
-    html += `<details class="collapsible" open><summary>⚠️ Kapasite Aşımı – İş süreleri korundu</summary><div class="body attention">
-      <strong>Zorunlu işlerin toplam işçilik talebi mevcut teknisyen kapasitesini aşıyor.</strong><br>
-      <span class="small" style="color:var(--muted)">Kullanılabilir kapasite: <strong>${capHours} saat</strong><br>
-      Planlanan zorunlu işçilik talebi: <strong>${needHours} saat</strong><br>
-      Kapasite açığı: <strong>${deficitHours} saat</strong><br>
-      İşlerin süreleri otomatik olarak küçültülmedi. Atanamayan süreler sonuç uyarılarında gösterilir; planı uygulamadan önce kapasite/iş listesi yeniden düzenlenmelidir.</span>${detailHtml}
-    </div></details>`;
-  }
-
-  if (roundingAdjustments.length > 0) {
-    const rows = roundingAdjustments.map(a => `<div class="small">• ${escHtml(a.name)}: ${(a.before / 60).toFixed(2)} → ${(a.after / 60).toFixed(2)} saat (${a.diff > 0 ? '+' : ''}${a.diff} dk, 15 dk yukarı yuvarlama)</div>`).join('');
-    html += `<details class="collapsible"><summary>ℹ️ 15 dk yukarı yuvarlama düzeltmeleri (${roundingAdjustments.length})</summary><div class="body">${rows}</div></details>`;
-  }
-
-  // Tek iş kartı: eşit paylaşım özeti ve eşitliği bozan (çakışan) koşullar.
-  let equalShareSummary = null;
-  if (equalShare) {
-    const es = equalShare;
-    const h = minutesToHoursStr;
-    const finalMin = techObjs.map(t => t.segments.reduce((s, sg) => sg.taskId === es.task.id ? s + (sg.end - sg.start) : s, 0));
-    const level = Math.max(0, ...es.planned.filter((p, i) => p > es.pre[i]));
-    const conflicts = [], infos = [], noShare = [], shortRound = [];
-    techObjs.forEach((t, i) => {
-      if (es.pre[i] > level) conflicts.push(`${t.name}: manuel ataması (${h(es.pre[i])} sa) eşit payı aşıyor; işin kalanı diğer personele paylaştırıldı.`);
-      else if (es.planned[i] < level) {
-        if (es.supervisionLimited[i]) conflicts.push(`${t.name}: aynı işte Supervisor'ün çalıştığı saatler yetmediği için ${h(es.planned[i])} sa verilebildi (denetim kuralı eşitlikten önce gelir).`);
-        else if (es.planned[i] - es.pre[i] >= es.initialCaps[i]) conflicts.push(`${t.name}: dolu saatleri nedeniyle boş zamanı (${h(es.initialCaps[i])} sa) eşit paya yetmedi.`);
-        else if (es.planned[i] === 0) noShare.push(t.name);
-        else shortRound.push(t.name);
-      }
-    });
-    if (noShare.length) conflicts.push(`İş süresi herkese en az 15 dk vermeye yetmiyor: ${noShare.join(', ')} bu işten pay almadı.`);
-    if (shortRound.length) conflicts.push(`15 dk'lık plan birimi nedeniyle tam eşitlik sağlanamadı: ${shortRound.join(', ')} diğerlerinden en fazla 15 dk az aldı. İşçilik tahmini eşitleme amacıyla artırılmadı.`);
-    const changed = techObjs.map((_, i) => i).filter(i => finalMin[i] !== es.planned[i]);
-    const withdrawn = changed.length > 0 && finalMin.every(m => m === 0);
-    if (withdrawn) conflicts.push('B1 onayı planlanamadığı için iş personelden geri alındı (aşağıdaki uyarılara bakın).');
-    else changed.forEach(i => conflicts.push(`${techObjs[i].name}: denetim / B1 kontrolü sonrası payı ${h(es.planned[i])} → ${h(finalMin[i])} sa oldu.`));
-    // Eşitlik için işçilik süresi artırılmaz; toplam dağıtım, girilen tahmini korur.
-    if (algoMode === 'tech_priority') infos.push("Teknisyen Öncelikli yöntemin 2'li/3'lü ekip ve parça kuralları tek iş kartında uygulanmaz; iş tüm personele paylaştırıldı.");
-
-    // Eşitlik sağlandıysa herkesin payı, sağlanamadıysa ulaşılamayan eşit pay hedefi gösterilir.
-    const shareLabel = conflicts.length ? `eşit pay hedefi: <strong>${h(es.target)} sa</strong>` : `kişi başı pay: <strong>${h(level)} sa</strong>`;
-    equalShareSummary = { is_no: es.task.name, [conflicts.length ? 'esit_pay_hedefi' : 'kisi_basi_pay']: h(conflicts.length ? es.target : level) + ' sa', notlar: conflicts.concat(infos) };
-    html += `<div class="${conflicts.length ? 'attention' : 'capacity-info'}"><strong>⚖️ Tek İş Kartı – Eşit Paylaşım${conflicts.length ? ': Çakışan Koşullar' : ''}</strong>
-      <div class="small" style="margin:6px 0"><strong>${escHtml(es.task.name)}</strong> işi ${techObjs.length} personele paylaştırıldı – ${shareLabel}</div>
-      ${conflicts.concat(infos).map(x => `<div class="small">• ${escHtml(x)}</div>`).join('')}</div>`;
-  }
-
-  // ==========================================================
-  // 👷 Teknisyenlerin Programı – YENİ 2 SÜTUNLU TASARIM
-  // Teknisyen ismi + Toplam (saat) başlık olarak; içeride
-  // İşler ve zaman aralıkları tek satırda 2 sütun.
-  // ==========================================================
-  let techHtml = `<details class="collapsible" id="techProgram" open><summary>👷 Teknisyenlerin Programı</summary><div class="body">
-    <div style="margin:10px 0 14px 0">
-      <label class="small" style="display:block;margin-bottom:6px;color:var(--muted)">Opsiyonel Not</label>
-      <textarea data-field="program-note" placeholder="Planla ilgili not ekle...">${escHtml(programNote)}</textarea>
-    </div>`;
-
-  const roleLabel = r => r === 'supervisor' ? 'Supervisor' : r === 'qualified' ? 'Kalifiyeli' : 'Teknisyen';
-  const roleEmoji = r => r === 'supervisor' ? '👷🏼‍♂️' : r === 'qualified' ? '🧑‍🔬' : '👨‍🔧';
-  const nameWithRole = i => escHtml(perTech[i].name) + (isGroup ? ` <span title="${roleLabel(perTech[i].role)}">${roleEmoji(perTech[i].role)}</span>` : '');
-
-  // Kişi bazında toplam ve boşluklar: kartlar gruplandığı için kişinin günlük toplamı kartların altındaki tabloda gösterilir.
-  let summaryRows = '';
-  perTech.forEach((p, idx)=>{
-    p.segs.sort((a,b)=>a.start - b.start);
-
-    let gapCell = '—';
-    // p.total manuel atamaları da içerir; dolu bloklar sonrası kapasiteden toplam atanmış işi çıkar.
-    const freeCap = Math.max(0, _workEnd_offset - (techBusyMinutes[idx] || 0));
-    const remainingFree = Math.max(0, freeCap - p.total);
-    if (freeCap !== undefined && remainingFree >= 15) {
-      const gaps = [];
-      const techObj = techObjs[idx];
-      if (techObj) {
-        for (const [ws, we] of getFreeIntervals(techObj)) {
-          if (we - ws >= 15) gaps.push(`${m2t(workToReal(ws, 'start'))} - ${m2t(workToReal(we, 'end'))}`);
-        }
-      }
-      gapCell = `<span style="color:var(--warning)">⚠ ${minutesToHoursStr(remainingFree)} sa${gaps.length ? `<br><span style="font-family:monospace;font-size:0.9em">${gaps.join(', ')}</span>` : ''}</span>`;
     }
-    const totalCell = p.segs.length ? `${minutesToHoursStr(p.total)} sa` : `<span style="color:var(--warning)">⚠ Atanmış iş yok</span>`;
-    summaryRows += `<tr><td><strong>${nameWithRole(idx)}</strong></td><td>${totalCell}</td><td>${gapCell}</td></tr>`;
-  });
-
-  // Aynı işi aynı saat aralığında yapan personeller tek kartta toplanır;
-  // kişinin tek başına yaptığı işler kendi kartında kalır.
-  const slots = new Map();
-  perTech.forEach((p, idx) => p.segs.forEach(s => {
-    const key = `${s.taskId}|${s.start}|${s.end}`;
-    if (!slots.has(key)) slots.set(key, { ...s, members: [] });
-    const slot = slots.get(key);
-    slot.members.push(idx);
-    slot.locked = slot.locked || s.locked;
-  }));
-  const cardMap = new Map();
-  slots.forEach(slot => {
-    const key = slot.members.join(',');
-    if (!cardMap.has(key)) cardMap.set(key, { members: slot.members, segs: [] });
-    cardMap.get(key).segs.push(slot);
-  });
-  const cards = [...cardMap.values()];
-  cards.forEach(c => c.segs.sort((a,b)=>a.start - b.start));
-  cards.sort((a,b) => a.segs[0].start - b.segs[0].start || b.members.length - a.members.length || a.members[0] - b.members[0]);
-
-  const waIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>';
-  if (cards.length) {
-    techHtml += `<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
-      <button class="btn-wa-copy btn-wa-all" onclick="copyWAAll()">${waIcon} <span>Tümünü WhatsApp'a Kopyala</span></button>
-    </div>`;
+    return { spec, techObjs, headObj, tasksCopy, unallocated, finalUnallocated, headUnallocated, headOverflowAssignments,
+      headSupportAssignments, headAssignments, supervisionGaps, b1OnlyTaskIds, equalShare, warnings: scenarioWarnings, earlyApprovals };
   }
 
-  window._waCopyData = [];
-  cards.forEach((c, idx)=>{
-    const total = c.segs.reduce((sum, s) => sum + (s._we - s._ws), 0);
-    const hasRegular = isGroup && c.members.some(i => perTech[i].role === 'regular');
-    const supMembers = isGroup ? c.members.filter(i => perTech[i].role === 'supervisor') : [];
+  // ============================================================
+  // Dağıtım senaryoları
+  // ------------------------------------------------------------
+  // Adam saat dağıtımı birden fazla ekip düzeniyle yapılabiliyorsa her düzen bir senaryodur. Her teknisyen
+  // bir senaryoda tek bir ekipte yer alır. Grup modunda Teknisyen içeren her ekipte en az bir Supervisor bulunur.
+  // Kullanıcı seçmezse hassasiyet çubuğuna göre en uygun senaryo otomatik seçilir.
+  // ============================================================
+  const MAX_SCENARIOS = 8;
+  function generateCrewSpecs(){
+    const n = technicians.length;
+    const idx = Array.from({ length: n }, (_, i) => i);
+    const roleAt = i => (isGroup ? (techRoles[i] || 'regular') : 'all');
+    const specs = [];
+    const seen = new Set();
+    const norm = crews => crews.filter(c => c.length).map(c => c.slice().sort((a, b) => a - b)).sort((a, b) => a[0] - b[0]);
+    const valid = crews => !isGroup || crews.every(c => !c.some(i => roleAt(i) === 'regular') || c.some(i => roleAt(i) === 'supervisor'));
+    const add = raw => {
+      const crews = norm(raw);
+      const key = crews.map(c => c.join(',')).join('|');
+      if (seen.has(key) || !valid(crews)) return;
+      seen.add(key);
+      specs.push({ key, crews });
+    };
+    const smallest = list => list.reduce((m, c) => (c.length < m.length ? c : m), list[0]);
+    const balanced = m => { const cs = Array.from({ length: m }, () => []); idx.forEach(i => smallest(cs).push(i)); return cs; };
 
-    const body = '<div class="program-table">' + c.segs.map(s => {
-      let line = `<div class="program-seg">
-        <span class="program-task">${s.locked ? '<span title="Manuel atama">📌 </span>' : ''}${escHtml(s.task)}</span>
-        <span class="program-time">${m2t(s.start)} - ${m2t(s.end)}</span>
-      </div>`;
-      if (hasRegular && supMembers.length) {
-        // Kartta Supervisor varsa aynı işte aynı saatte çalışan o kişi denetler.
-        line += `<div class="small program-meta-line" style="color:var(--accent)">↳ Denetim: ${supMembers.map(i => escHtml(perTech[i].name)).join(', ')} (${m2t(s.start)}-${m2t(s.end)})</div>`;
-      } else if (hasRegular) {
-        const attr = attributeSupervision(s._ws, s._we, techObjs, techRoles, technicians, s.taskId);
-        if (attr.covered.length > 0) {
-          const supList = attr.covered.map(cv => `${escHtml(cv.supName)} (${m2t(workToReal(cv.start, 'start'))}-${m2t(workToReal(cv.end, 'end'))})`).join(', ');
-          line += `<div class="small program-meta-line" style="color:var(--accent)">↳ Denetim: ${supList}</div>`;
-        }
-        if (!attr.fullyCovered) {
-          line += `<div class="small program-meta-line" style="color:var(--danger)">⚠ Denetimsiz: ${m2t(workToReal(attr.uncoveredFrom, 'start'))}-${m2t(workToReal(s._we, 'end'))}</div>`;
+    add([idx]);
+    if (singleTask || n < 2) return specs;
+
+    if (isGroup) {
+      const S = idx.filter(i => roleAt(i) === 'supervisor');
+      const Q = idx.filter(i => roleAt(i) === 'qualified');
+      const R = idx.filter(i => roleAt(i) === 'regular');
+      const lead = k => {
+        const cs = Array.from({ length: k }, () => []);
+        S.forEach((s, i) => cs[i % k].push(s));
+        R.concat(Q).forEach(i => smallest(cs).push(i));
+        return cs;
+      };
+      for (let k = 2; k <= Math.min(S.length, 4); k++) add(lead(k));
+      if (Q.length && S.length + R.length > 0) {
+        for (let g = 1; g <= Math.min(Q.length, 2); g++) {
+          for (let k = 1; k <= Math.min(S.length, 3); k++) {
+            const cs = Array.from({ length: k }, () => []);
+            S.forEach((s, i) => cs[i % k].push(s));
+            R.forEach(r => smallest(cs).push(r));
+            const qs = Array.from({ length: g }, () => []);
+            Q.forEach(q => smallest(qs).push(q));
+            add(cs.concat(qs));
+          }
         }
       }
-      return line;
-    }).join('') + '</div>';
-
-    window._waCopyData[idx] = {
-      names: c.members.map(i => perTech[i].name),
-      total: minutesToHoursStr(total),
-      segs: c.segs.map(s => ({ task: s.task, s: m2t(s.start), e: m2t(s.end) }))
-    };
-
-    techHtml += `<div class="tech-program-block">
-      <div class="tech-program-header">
-        <div class="tech-program-header-left">
-          <span class="tech-program-name"><span>${c.members.length > 1 ? '👥' : '👤'} ${c.members.map(nameWithRole).join(' + ')}</span></span>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-          <span class="tech-program-total">Toplam: <strong>${minutesToHoursStr(total)} sa</strong></span>
-          <button class="btn-wa-copy" onclick="copyWA(${idx})">${waIcon} <span>WhatsApp</span></button>
-        </div>
-      </div>
-      ${body}
-    </div>`;
-  });
-  techHtml += `<div class="small" style="color:var(--muted);margin-top:4px">Kişi bazında toplam ve boşluklar</div>
-    <table class="table" style="margin-top:8px"><tr><th>Teknisyen</th><th>Toplam</th><th>Boşluk</th></tr>${summaryRows}</table>`;
-  techHtml += `</div></details>`;
-  html += techHtml;
-
-  // ==========================================================
-  // 👑 B1 Teknisyen Zaman Listesi
-  // ==========================================================
-  if (headObj) {
-    const allHeadSegs = headObj.segments.filter(s => s.taskId !== -1).sort((a,b) => a.start - b.start);
-    let headDisplayHtml = '';
-    if (allHeadSegs.length > 0) {
-      const b1OnlyKeys = new Set(headOverflowAssignments
-        .filter(h => h.type === 'b1Only' || h.type === 'b1OnlyFallback')
-        .map(h => `${h.start}-${h.end}-${h.taskId}`));
-      headDisplayHtml = '<div class="b1-list">' + allHeadSegs.map(s => {
-        const realStart = m2t(workToReal(s.start, 'start'));
-        const realEnd = m2t(workToReal(s.end, 'end'));
-        const isB1Only = s.kind === 'b1only' || b1OnlyKeys.has(`${s.start}-${s.end}-${s.taskId}`);
-        const isSupport = s.kind === 'support';
-        const isOpenB1 = tasksCopy.find(t => t.id === s.taskId)?.isOpen;
-        const tag = isB1Only ? '<span class="b1-only-tag">B1-only</span>'
-          : isSupport ? '<span class="b1-only-tag" title="Teknisyenlere sığmayan kalan süre B1 boş zamanına yerleştirildi">B1 iş desteği</span>'
-          : (isOpenB1 ? '<span class="b1-only-tag">OPEN fill</span>' : '');
-        return `<div class="b1-row${isB1Only ? ' b1-only' : ''}">
-          <div class="b1-main-line">
-            <span class="b1-task">${escHtml(s.taskName)}</span>
-            <span class="b1-time">${realStart} - ${realEnd}</span>
-          </div>
-          ${tag ? `<div class="b1-meta-line">${tag}</div>` : ''}
-        </div>`;
-      }).join('') + '</div>';
+      if (!R.length) for (let m = 2; m <= Math.min(n, 4); m++) add(balanced(m));
     } else {
-      headDisplayHtml = '<div class="small" style="color:var(--muted)">B1 teknisyenine atanmış görev yok.</div>';
+      for (let m = 2; m <= Math.min(n, 4); m++) add(balanced(m));
     }
-    const headWorkTotal = allHeadSegs.reduce((s, seg) => s + (seg.end - seg.start), 0);
-    const headOverflowTotal = headOverflowAssignments.reduce((s, h) => s + (h.end - h.start), 0);
-    const headSupportTotal = headSupportAssignments.reduce((s, h) => s + (h.end - h.start), 0);
-    html += `<div class="card"><h2>👑 B1 Teknisyen Zaman Listesi <span class="role-tag head">${escHtml(headTech || '—')}</span></h2><div class="small" style="color:var(--muted);margin-bottom:8px">B1 için otomatik ayarlanan onay / B1-only zaman aralıkları aşağıdadır. Bu liste Supervisor Grup modunda da hesaplanır.</div>${headDisplayHtml}`;
-    html += `<div class="stat" style="margin-top:10px">
-      Toplam B1 yükü: <strong>${minutesToHoursStr(headWorkTotal)} saat</strong>
-      ${headOverflowTotal > 0 ? ` – B1’e özel atanan iş yükü: <strong style="color:var(--warn)">${minutesToHoursStr(headOverflowTotal)} saat</strong>` : ''}
-      ${headSupportTotal > 0 ? ` – Kalan işe B1 iş desteği: <strong style="color:var(--warn)">${minutesToHoursStr(headSupportTotal)} saat</strong>` : ''}
+    specs.sort((a, b) => a.crews.length - b.crews.length);
+    return specs.slice(0, MAX_SCENARIOS);
+  }
+
+  // Bir senaryonun sonucunu puanlar. Sert ölçütler (atanamayan süre, denetim açığı, erken onay) önce gelir;
+  // yumuşak ölçütler: teknisyen eşitliği (yük dengesi + aynı iş/aynı saat benzerliği) ve B1 onay düzeni.
+  function scenarioMetrics(R){
+    const asg = new Map();
+    const addAsg = (id, m) => asg.set(id, (asg.get(id) || 0) + m);
+    R.techObjs.forEach(t => t.segments.forEach(s => { if (s.taskId >= 0) addAsg(s.taskId, s.end - s.start); }));
+    let degraded = 0;
+    R.headObj.segments.forEach(s => {
+      if (s.taskId < 0) return;
+      addAsg(s.taskId, s.end - s.start);
+      if (s.kind) degraded += s.end - s.start;
+    });
+    let missing = 0;
+    R.tasksCopy.forEach(t => {
+      if (t.isOpen || t.rawMin <= 0) return;
+      const budget = Math.max(15, ceil15x(t.techTargetMin + t.headAlloc));
+      missing += Math.max(0, budget - (asg.get(t.id) || 0));
+    });
+
+    const cells = R.techObjs.map(t => {
+      const set = new Set();
+      t.segments.forEach(s => { if (s.taskId >= 0) for (let c = Math.floor(s.start / 15); c * 15 < s.end; c++) set.add(s.taskId + ':' + c); });
+      return set;
+    });
+    const loads = cells.map(c => c.size);
+    const able = R.techObjs.map((_, i) => techFreeCapacities[i] > 0 ? i : -1).filter(i => i >= 0);
+    let balance = 1;
+    if (able.length > 1) {
+      const hi = Math.max(...able.map(i => loads[i])), lo = Math.min(...able.map(i => loads[i]));
+      balance = hi > 0 ? 1 - (hi - lo) / hi : 1;
+    }
+    let sim = 1, pairs = 0, simSum = 0;
+    for (let a = 0; a < able.length; a++) for (let b = a + 1; b < able.length; b++) {
+      const A = cells[able[a]], B = cells[able[b]];
+      let inter = 0;
+      A.forEach(x => { if (B.has(x)) inter++; });
+      const uni = A.size + B.size - inter;
+      simSum += uni ? inter / uni : 1;
+      pairs++;
+    }
+    if (pairs) sim = simSum / pairs;
+    const equality = 0.5 * balance + 0.5 * sim;
+
+    const ends = R.headObj.segments.filter(s => s.taskId >= 0 && !s.kind).map(s => s.end).sort((a, b) => a - b);
+    let regularity = 1;
+    if (ends.length > 2) {
+      const gaps = ends.map((e, i) => e - (i ? ends[i - 1] : 0));
+      const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+      const sd = Math.sqrt(gaps.reduce((a, g) => a + (g - mean) * (g - mean), 0) / gaps.length);
+      regularity = mean > 0 ? Math.max(0, 1 - sd / mean) : 0;
+    }
+    const pieces = R.techObjs.reduce((a, t) => a + t.segments.filter(s => s.taskId >= 0).length, 0);
+    return { missing, degraded, gaps: R.supervisionGaps.length, early: R.earlyApprovals.length, equality, regularity, pieces,
+      score: (1 - sens) * equality + sens * regularity };
+  }
+
+  function scenarioSignature(R){
+    return R.techObjs.map(t => t.segments.filter(s => s.taskId >= 0).map(s => `${s.taskId}:${s.start}-${s.end}`).join(',')).join('/')
+      + '#' + R.headObj.segments.filter(s => s.taskId >= 0).map(s => `${s.taskId}:${s.start}-${s.end}`).join(',');
+  }
+
+  function buildAllScenarios(){
+    const out = [];
+    const seenSig = new Set();
+    generateCrewSpecs().forEach(spec => {
+      const R = buildScenario(spec);
+      const sig = scenarioSignature(R);
+      if (seenSig.has(sig)) return;
+      seenSig.add(sig);
+      R.metrics = scenarioMetrics(R);
+      out.push(R);
+    });
+    // Aynı sert sonucu veren senaryolar seçilebilir; belirgin biçimde daha kötü olanlar listeden çıkarılır.
+    const best = out.reduce((b, r) => {
+      const m = r.metrics;
+      return (!b || m.gaps < b.gaps || (m.gaps === b.gaps && (m.missing < b.missing || (m.missing === b.missing && m.early < b.early)))) ? m : b;
+    }, null);
+    const usable = out.filter(r => r.metrics.gaps <= best.gaps && r.metrics.missing <= best.missing + 15 && r.metrics.early <= best.early + 1);
+    usable.forEach((r, i) => { r.id = i; });
+    return usable.length ? usable : out;
+  }
+
+  // Önerilen senaryo: puanı en yüksek olanın SCORE_TOL yakınındaki senaryolar arasından en az ekipli olan
+  // (küçük bir kazanç için ekip yapısı bozulmasın). Kullanıcı seçtiyse onun seçimi geçerlidir.
+  const SCORE_TOL = 0.05;
+  function pickScenario(list, chosenKey){
+    const ranked = list.slice().sort((a, b) => b.metrics.score - a.metrics.score || a.spec.crews.length - b.spec.crews.length || a.id - b.id);
+    const recommended = ranked.filter(r => r.metrics.score >= ranked[0].metrics.score - SCORE_TOL)
+      .sort((a, b) => a.spec.crews.length - b.spec.crews.length || b.metrics.score - a.metrics.score || a.id - b.id)[0];
+    const manual = list.find(r => r.spec.key === chosenKey);
+    return manual ? { picked: manual, auto: false, recommended } : { picked: recommended, auto: true, recommended };
+  }
+
+  const crewNames = crews => crews.map(c => c.map(i => technicians[i]).join(' + ')).join('  |  ');
+  function scenarioBarHtml(view){
+    const { list, picked, auto, recommended } = view;
+    if (list.length < 2) {
+      return `<div class="card scn-card"><div class="small">🧩 Ekip düzeni: <strong>${escHtml(crewNames(picked.spec.crews))}</strong> <span style="color:var(--muted)">(bu girdilerle tek uygun dağıtım var)</span></div></div>`;
+    }
+    const chips = list.map((r, i) => {
+      const m = r.metrics;
+      const badge = r === recommended ? '<span class="scn-badge">★ Önerilen</span>' : '';
+      return `<button type="button" class="scn-chip${r === picked ? ' active' : ''}" onclick="selectScenario('${escHtml(r.spec.key)}')" title="${escHtml(crewNames(r.spec.crews))}">
+        <span class="scn-title">Senaryo ${i + 1} · ${r.spec.crews.length === 1 ? 'Tek ekip' : r.spec.crews.length + ' ekip'} ${badge}</span>
+        <span class="scn-crews">${escHtml(crewNames(r.spec.crews))}</span>
+        <span class="scn-meta">Teknisyen eşitliği %${Math.round(m.equality * 100)} · B1 düzeni %${Math.round(m.regularity * 100)} · ${m.pieces} parça${m.missing ? ` · <span style="color:var(--warning)">${(m.missing / 60).toFixed(2)} sa atanamadı</span>` : ''}</span>
+      </button>`;
+    }).join('');
+    return `<div class="card scn-card"><h2>🎛️ Dağıtım Senaryoları</h2>
+      <div class="small" style="color:var(--muted);margin-bottom:8px">Adam saat dağıtımı birden fazla ekip düzeniyle yapılabiliyor. Her teknisyen bir senaryoda tek bir ekipte yer alır. ${auto ? 'Hassasiyet çubuğuna göre <strong>önerilen senaryo otomatik seçildi</strong>; isterseniz aşağıdan kendiniz seçebilirsiniz.' : 'Senaryoyu <strong>siz seçtiniz</strong>.'}</div>
+      <div class="scn-list">${chips}</div>
+      ${auto ? '' : `<button type="button" class="btn scn-auto" onclick="selectScenario('')">↺ Otomatik (önerilen) seçime dön</button>`}
     </div>`;
-    html += `</div>`;
   }
 
-  if (isGroup) {
-    const coverage = buildSupervisorCoverage(techObjs, techRoles);
-    if (coverage.length === 0) {
-      const covHtml = '<div class="warning" style="margin-top:0">⚠ Hiçbir Supervisor’e iş atanamadığı için denetim aralığı oluşmadı.</div>';
-      html += `<div class="card"><h2>🛡 Supervisor Denetim Pencereleri</h2>${covHtml}</div>`;
+  // Seçilen senaryoyu çizer (senaryo çubuğu, ekip kartları, B1 listesi, uyarılar).
+  function renderPlan(view){
+    const R = view.picked;
+    const { techObjs, headObj, tasksCopy, unallocated, finalUnallocated, headUnallocated, headOverflowAssignments,
+      headSupportAssignments, supervisionGaps, equalShare } = R;
+    const preAssignWarnings = R.warnings;
+    // ============================================================
+    // RENDER
+    // ============================================================
+    const perTech = technicians.map((n, idx) => ({
+      name: n,
+      role: isGroup ? (techRoles[idx] || 'regular') : 'all',
+      segs: [], total: 0
+    }));
+    techObjs.forEach((t, idx) => {
+      t.segments.forEach(s => {
+        if (s.taskId == null || s.taskId === -1) return;
+        const real = { startReal: workToReal(s.start, 'start'), endReal: workToReal(s.end, 'end') };
+        perTech[idx].segs.push({ taskId: s.taskId, task: tasks[s.taskId].name, start: real.startReal, end: real.endReal, _ws: s.start, _we: s.end, locked: !!s.locked });
+        let segmentDuration = real.endReal - real.startReal;
+        for (const b of _breaks) {
+          if (real.startReal < b.e && real.endReal > b.s) {
+            const overlapStart = Math.max(real.startReal, b.s);
+            const overlapEnd = Math.min(real.endReal, b.e);
+            segmentDuration -= Math.max(0, overlapEnd - overlapStart);
+          }
+        }
+        perTech[idx].total += segmentDuration;
+      });
+    });
+
+    let html = '';
+    const totalInputHours = tasks.reduce((s,t)=>s + (parseFloat(t.hours)||0),0);
+    const crewText = R.spec.crews.length === 1 ? 'Tek ekip' : `${R.spec.crews.length} ekip`;
+    html += `<div class="card"><div class="small">Mod: <strong>${isGroup ? 'Supervisor Grup' : 'Supervisor ALL'}</strong> – Hassasiyet: <strong>${sensitivityText()}</strong> – Ekip düzeni: <strong>${crewText}</strong> – Toplam İş: <strong>${tasks.length}</strong> – Girdi Toplam Süre: <strong>${totalInputHours.toFixed(2)} saat</strong></div></div>`;
+    html += scenarioBarHtml(view);
+
+    // Capacity table
+    const busyRows = technicians.map((name, i) => {
+      const busyH = minutesToHoursStr(techBusyMinutes[i] || 0);
+      const freeH = minutesToHoursStr(techFreeCapacities[i] || 0);
+      const role = isGroup ? `<span class="role-tag ${techRoles[i] || 'regular'}">${techRoles[i] === 'supervisor' ? 'Supervisor' : techRoles[i] === 'qualified' ? 'Kalifiyeli' : 'Teknisyen'}</span>` : '';
+      const preH = minutesToHoursStr(techPreAssignMinutes[i] || 0);
+      return `<tr><td><strong>${escHtml(name)}</strong>${role}</td><td>${busyH}</td><td>${preH}</td><td>${freeH}</td></tr>`;
+    }).join('');
+    html += `<details class="collapsible" open><summary>⏱️ Teknisyen Net Kapasite Kontrolü</summary><div class="body">
+      <div class="small" style="color:var(--muted);margin-bottom:8px">Dolu saatler iş ataması için kapalıdır ve toplam yüke eklenmez.</div>
+      <table class="table"><tr><th>Teknisyen</th><th>Dolu Blok</th><th>Manuel İş</th><th>Otomatik Atamaya Kalan</th></tr>${busyRows}</table>
+    </div></details>`;
+
+    if (preAssignWarnings.length > 0) {
+      html += `<div class="warning"><strong>📌 Uygulanamayan Manuel Atamalar</strong><br>${preAssignWarnings.map(w => `<div class="small">• ${w}</div>`).join('')}</div>`;
     }
-  }
 
-  // Son plana göre: onayı işin son çalışma saatinden önce kalan işler (B1'de uygun boş zaman bulunamadı).
-  recomputeTaskTimeline();
-  const earlyApprovals = [];
-  if (headObj) {
-    tasksCopy.filter(t => !t.isOpen && !b1OnlyTaskIds.has(t.id)).forEach(t => {
-      const approvals = headObj.segments.filter(sg => sg.taskId === t.id && !sg.kind);
-      const taskEnd = taskFinalEnd.get(t.id);
-      if (!approvals.length || taskEnd === null || taskEnd === undefined) return;
-      const last = approvals.reduce((a, b) => (b.end > a.end ? b : a));
-      if (last.end < taskEnd) earlyApprovals.push({ taskName: t.name, from: last.start, to: last.end, taskEnd });
-    });
-  }
-  if (earlyApprovals.length > 0) {
-    const rows = earlyApprovals.map(w => `<div class="small">⚠ <strong>${escHtml(w.taskName)}</strong> – B1 onayı ${m2t(workToReal(w.from, 'start'))} - ${m2t(workToReal(w.to, 'end'))}; işte bu saatten sonra da çalışma var (son çalışma bitişi ${m2t(workToReal(w.taskEnd, 'end'))}).</div>`).join('');
-    html += `<div class="attention"><strong>⚠ B1 Onayı İş Bitişinden Önce</strong><br><div class="small" style="margin:6px 0">B1'in uygun boş zamanı bulunamadığı için aşağıdaki işlerin onayı, işin son çalışma saatinden önceye yerleştirildi. Gerekirse B1 dolu saatlerini veya iş dağılımını gözden geçirin.</div>${rows}</div>`;
-  }
-
-  if (isGroup && supervisionGaps.length > 0) {
-    const gapHtml = supervisionGaps.map(g => `<div class="small">⚠ <strong>${escHtml(g.techName)}</strong> – ${escHtml(g.taskName)} işi denetimsiz: ${m2t(g.from)} - ${m2t(g.to)}</div>`).join('');
-    html += `<div class="warning"><strong>⛔ Denetim Açığı</strong><br><div class="small" style="color:var(--danger);margin:6px 0">Bu Teknisyenlerin işleri en az bir Supervisor olmadan başlatılamaz. Programı revize edin veya Supervisor saatlerini güncelleyin.</div>${gapHtml}</div>`;
-  }
-
-  if (isGroup) {
-    const idleNames = perTech.filter(p => p.segs.length === 0).map(p => p.name);
-    if (idleNames.length > 0) {
-      html += `<div class="attention"><strong>⚠ Atama Yapılmayan Teknisyenler</strong><br><div class="small" style="color:var(--warn);margin-top:6px">Aşağıdaki teknisyenlere zaman aralığı atanamadı (yetersiz iş yükü veya denetim penceresi sorunu olabilir): ${idleNames.map(escHtml).join(', ')}</div></div>`;
+    if (manualOverAssignmentWarnings.length > 0) {
+      html += `<div class="attention"><strong>📌 Manuel atama işçilik hedefini aşıyor</strong>${manualOverAssignmentWarnings.map(w => `<div class="small">• ${w}</div>`).join('')}</div>`;
     }
-  }
 
-  if(headUnallocated.length > 0){
-    const headUnallocatedByTask = {};
-    headUnallocated.forEach(u => {
-      if (!headUnallocatedByTask[u.task]) headUnallocatedByTask[u.task] = { totalMinutes: 0, taskName: u.task };
-      headUnallocatedByTask[u.task].totalMinutes += u.minutes;
+    // Kapasite yetmiyorsa süreleri değiştirmek yerine açık kapasite açığını göster.
+    if (capacityExceeded) {
+      const capHours = (totalCapacityMin / 60).toFixed(2);
+      const needHours = (mandatoryAfterRound / 60).toFixed(2);
+      const deficitHours = ((mandatoryAfterRound - totalCapacityMin) / 60).toFixed(2);
+      let detailHtml = '<table class="table" style="margin-top:10px"><tr><th>İş</th><th>Planlama işçilik talebi</th><th>Manuel atama</th></tr>';
+      tasksCopy.filter(t => !t.isOpen && t.techWorkMinOriginal > 0).forEach(task => {
+        detailHtml += `<tr><td><strong>${escHtml(task.name)}</strong></td><td>${(task.techWorkMin / 60).toFixed(2)} saat</td><td>${((task.preAssignedMin || 0) / 60).toFixed(2)} saat</td></tr>`;
+      });
+      detailHtml += '</table>';
+      html += `<details class="collapsible" open><summary>⚠️ Kapasite Aşımı – İş süreleri korundu</summary><div class="body attention">
+        <strong>Zorunlu işlerin toplam işçilik talebi mevcut teknisyen kapasitesini aşıyor.</strong><br>
+        <span class="small" style="color:var(--muted)">Kullanılabilir kapasite: <strong>${capHours} saat</strong><br>
+        Planlanan zorunlu işçilik talebi: <strong>${needHours} saat</strong><br>
+        Kapasite açığı: <strong>${deficitHours} saat</strong><br>
+        İşlerin süreleri otomatik olarak küçültülmedi. Atanamayan süreler sonuç uyarılarında gösterilir; planı uygulamadan önce kapasite/iş listesi yeniden düzenlenmelidir.</span>${detailHtml}
+      </div></details>`;
+    }
+
+    if (roundingAdjustments.length > 0) {
+      const rows = roundingAdjustments.map(a => `<div class="small">• ${escHtml(a.name)}: ${(a.before / 60).toFixed(2)} → ${(a.after / 60).toFixed(2)} saat (${a.diff > 0 ? '+' : ''}${a.diff} dk, 15 dk yukarı yuvarlama)</div>`).join('');
+      html += `<details class="collapsible"><summary>ℹ️ 15 dk yukarı yuvarlama düzeltmeleri (${roundingAdjustments.length})</summary><div class="body">${rows}</div></details>`;
+    }
+
+    // Tek iş kartı: eşit paylaşım özeti ve eşitliği bozan (çakışan) koşullar.
+    let equalShareSummary = null;
+    if (equalShare) {
+      const es = equalShare;
+      const h = minutesToHoursStr;
+      const finalMin = techObjs.map(t => t.segments.reduce((s, sg) => sg.taskId === es.task.id ? s + (sg.end - sg.start) : s, 0));
+      const level = Math.max(0, ...es.planned.filter((p, i) => p > es.pre[i]));
+      const conflicts = [], infos = [], noShare = [], shortRound = [];
+      techObjs.forEach((t, i) => {
+        if (es.pre[i] > level) conflicts.push(`${t.name}: manuel ataması (${h(es.pre[i])} sa) eşit payı aşıyor; işin kalanı diğer personele paylaştırıldı.`);
+        else if (es.planned[i] < level) {
+          if (es.supervisionLimited[i]) conflicts.push(`${t.name}: aynı işte Supervisor'ün çalıştığı saatler yetmediği için ${h(es.planned[i])} sa verilebildi (denetim kuralı eşitlikten önce gelir).`);
+          else if (es.planned[i] - es.pre[i] >= es.initialCaps[i]) conflicts.push(`${t.name}: dolu saatleri nedeniyle boş zamanı (${h(es.initialCaps[i])} sa) eşit paya yetmedi.`);
+          else if (es.planned[i] === 0) noShare.push(t.name);
+          else shortRound.push(t.name);
+        }
+      });
+      if (noShare.length) conflicts.push(`İş süresi herkese en az 15 dk vermeye yetmiyor: ${noShare.join(', ')} bu işten pay almadı.`);
+      if (shortRound.length) conflicts.push(`15 dk'lık plan birimi nedeniyle tam eşitlik sağlanamadı: ${shortRound.join(', ')} diğerlerinden en fazla 15 dk az aldı. İşçilik tahmini eşitleme amacıyla artırılmadı.`);
+      const changed = techObjs.map((_, i) => i).filter(i => finalMin[i] !== es.planned[i]);
+      const withdrawn = changed.length > 0 && finalMin.every(m => m === 0);
+      if (withdrawn) conflicts.push('B1 onayı planlanamadığı için iş personelden geri alındı (aşağıdaki uyarılara bakın).');
+      else changed.forEach(i => conflicts.push(`${techObjs[i].name}: denetim / B1 kontrolü sonrası payı ${h(es.planned[i])} → ${h(finalMin[i])} sa oldu.`));
+
+      // Eşitlik sağlandıysa herkesin payı, sağlanamadıysa ulaşılamayan eşit pay hedefi gösterilir.
+      const shareLabel = conflicts.length ? `eşit pay hedefi: <strong>${h(es.target)} sa</strong>` : `kişi başı pay: <strong>${h(level)} sa</strong>`;
+      equalShareSummary = { is_no: es.task.name, [conflicts.length ? 'esit_pay_hedefi' : 'kisi_basi_pay']: h(conflicts.length ? es.target : level) + ' sa', notlar: conflicts.concat(infos) };
+      html += `<div class="${conflicts.length ? 'attention' : 'capacity-info'}"><strong>⚖️ Tek İş Kartı – Eşit Paylaşım${conflicts.length ? ': Çakışan Koşullar' : ''}</strong>
+        <div class="small" style="margin:6px 0"><strong>${escHtml(es.task.name)}</strong> işi ${techObjs.length} personele paylaştırıldı – ${shareLabel}</div>
+        ${conflicts.concat(infos).map(x => `<div class="small">• ${escHtml(x)}</div>`).join('')}</div>`;
+    }
+
+    // ==========================================================
+    // 👷 Teknisyenlerin Programı – YENİ 2 SÜTUNLU TASARIM
+    // Teknisyen ismi + Toplam (saat) başlık olarak; içeride
+    // İşler ve zaman aralıkları tek satırda 2 sütun.
+    // ==========================================================
+    let techHtml = `<details class="collapsible" id="techProgram" open><summary>👷 Teknisyenlerin Programı</summary><div class="body">
+      <div style="margin:10px 0 14px 0">
+        <label class="small" style="display:block;margin-bottom:6px;color:var(--muted)">Opsiyonel Not</label>
+        <textarea data-field="program-note" placeholder="Planla ilgili not ekle...">${escHtml(programNote)}</textarea>
+      </div>`;
+
+    const roleLabel = r => r === 'supervisor' ? 'Supervisor' : r === 'qualified' ? 'Kalifiyeli' : 'Teknisyen';
+    const roleEmoji = r => r === 'supervisor' ? '👷🏼‍♂️' : r === 'qualified' ? '🧑‍🔬' : '👨‍🔧';
+    const nameWithRole = i => escHtml(perTech[i].name) + (isGroup ? ` <span title="${roleLabel(perTech[i].role)}">${roleEmoji(perTech[i].role)}</span>` : '');
+
+    // Kişi bazında toplam ve boşluklar: kartlar gruplandığı için kişinin günlük toplamı kartların altındaki tabloda gösterilir.
+    let summaryRows = '';
+    perTech.forEach((p, idx)=>{
+      p.segs.sort((a,b)=>a.start - b.start);
+
+      let gapCell = '—';
+      // p.total manuel atamaları da içerir; dolu bloklar sonrası kapasiteden toplam atanmış işi çıkar.
+      const freeCap = Math.max(0, _workEnd_offset - (techBusyMinutes[idx] || 0));
+      const remainingFree = Math.max(0, freeCap - p.total);
+      if (freeCap !== undefined && remainingFree >= 15) {
+        const gaps = [];
+        const techObj = techObjs[idx];
+        if (techObj) {
+          for (const [ws, we] of getFreeIntervals(techObj)) {
+            if (we - ws >= 15) gaps.push(`${m2t(workToReal(ws, 'start'))} - ${m2t(workToReal(we, 'end'))}`);
+          }
+        }
+        gapCell = `<span style="color:var(--warning)">⚠ ${minutesToHoursStr(remainingFree)} sa${gaps.length ? `<br><span style="font-family:monospace;font-size:0.9em">${gaps.join(', ')}</span>` : ''}</span>`;
+      }
+      const totalCell = p.segs.length ? `${minutesToHoursStr(p.total)} sa` : `<span style="color:var(--warning)">⚠ Atanmış iş yok</span>`;
+      summaryRows += `<tr><td><strong>${nameWithRole(idx)}</strong></td><td>${totalCell}</td><td>${gapCell}</td></tr>`;
     });
-    const headUnallocHtml = Object.values(headUnallocatedByTask).map(u => {
-      const unallocHours = (u.totalMinutes / 60).toFixed(2).replace('.', ',');
-      return `<div class="small">${escHtml(u.taskName)} – B1 için ${unallocHours} saat atanamadı</div>`;
-    }).join('');
-    html += `<div class="warning"><strong>⚠️ Atanamayan Onay Süreleri (B1)</strong><br>${headUnallocHtml}</div>`;
-  }
 
-  if (finalUnallocated.length > 0) {
-    const finalUnallocHtml = finalUnallocated.map(u => {
-      const unallocHours = (u.minutes / 60).toFixed(2).replace('.', ',');
-      return `<div class="small">${escHtml(u.task)} – ${unallocHours} saat hiçbir yere atanamadı (${escHtml(u.reason)})</div>`;
-    }).join('');
-    html += `<div class="warning"><strong>⚠️ Tamamen Atanamayan İşler</strong><br>${finalUnallocHtml}</div>`;
-  }
-
-  if (isGroup && unallocated.length > 0 && finalUnallocated.length === 0) {
-    const aggregated = {};
-    unallocated.forEach(u => {
-      if (!aggregated[u.task]) aggregated[u.task] = { minutes: 0, reasons: new Set() };
-      aggregated[u.task].minutes += u.minutes;
-      aggregated[u.task].reasons.add(u.reason);
+    // Her teknisyen tek bir ekipte (grupta) listelenir: kart = ekip. Ekibin aynı işi aynı saatte yapan üyeleri tek satırda
+    // birleşir; ekibin yalnızca bir kısmı çalışıyorsa satırın altında çalışanlar yazılır.
+    const crewCards = [];
+    R.spec.crews.forEach((members, crewIdx) => {
+      const slots = new Map();
+      members.forEach(i => perTech[i].segs.forEach(s => {
+        const key = `${s.taskId}|${s.start}|${s.end}`;
+        if (!slots.has(key)) slots.set(key, { ...s, members: [] });
+        const slot = slots.get(key);
+        slot.members.push(i);
+        slot.locked = slot.locked || s.locked;
+      }));
+      const active = members.filter(i => perTech[i].segs.length > 0);
+      if (!active.length) return;
+      const segs = [...slots.values()].sort((a, b) => a.start - b.start || a.taskId - b.taskId);
+      crewCards.push({ crewIdx, members, active, segs });
     });
-    const items = Object.entries(aggregated).map(([name, info]) => {
-      const h = (info.minutes / 60).toFixed(2).replace('.', ',');
-      const reasons = Array.from(info.reasons).join('; ');
-      return `<div class="small">${escHtml(name)} – ${h} saat atanamadı (${escHtml(reasons)})</div>`;
-    }).join('');
-    if (items) html += `<div class="attention"><strong>⚠ Atanamayan İş Parçaları</strong><br><div class="small" style="margin:6px 0">Aşağıdaki süreler hiçbir teknisyene yerleştirilemedi.</div>${items}</div>`;
-  }
 
-  const aiData = {
-    calisma_sistemi: isGroup ? "Grup (Supervisor Denetimli)" : "Herkes Bağımsız",
-    toplam_is_sayisi: tasks.length,
-    toplam_sure: totalInputHours.toFixed(2) + " saat",
-    // Ekrandaki "📋 İşler" listesinin birebir karşılığı: her işe ayrılması gereken süre.
-    is_listesi: tasks.map(t => ({
-      is_no: t.name,
-      ayrilacak_sure_saat: parseFloat(t.hours) || 0,
-      tip: t.open ? "OPEN" : "Zorunlu"
-    })),
-    is_bazinda_plan: tasks.map((t, i) => ({
-      is_no: t.name,
-      girilen_sure: (parseFloat(t.hours) || 0).toFixed(2) + " saat",
-      tip: t.open ? "OPEN" : "Zorunlu",
-      teknisyen_atamalari: perTech.flatMap(p => p.segs
-        .filter(s => s.taskId === i)
-        .map(s => ({ teknisyen: p.name, baslangic: m2t(s.start), bitis: m2t(s.end) })))
-        .sort((a, b) => a.baslangic.localeCompare(b.baslangic)),
-      b1_onay: headObj ? headObj.segments.filter(s => s.taskId === i)
-        .map(s => ({ baslangic: m2t(workToReal(s.start, 'start')), bitis: m2t(workToReal(s.end, 'end')), ...(s.kind === 'support' ? { tur: 'B1 iş desteği' } : s.kind === 'b1only' ? { tur: 'B1-only' } : {}) })) : []
-    })),
-    teknisyen_atamalari: perTech.map(p => ({
-      teknisyen: p.name,
-      rol: p.role,
-      toplam_sure: minutesToHoursStr(p.total) + " sa",
-      atanan_isler: p.segs.map(s => ({
-        is_no: s.task,
-        baslangic: m2t(s.start),
-        bitis: m2t(s.end)
+    const waIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>';
+    if (crewCards.length) {
+      techHtml += `<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+        <button class="btn-wa-copy btn-wa-all" onclick="copyWAAll()">${waIcon} <span>Tümünü WhatsApp'a Kopyala</span></button>
+      </div>`;
+    }
+
+    window._waCopyData = [];
+    crewCards.forEach((c, idx)=>{
+      // Ekip süresi: ekipten en az birinin çalıştığı zaman (iş-zamanı aralıklarının birleşimi).
+      const spans = c.segs.map(s => [s._ws, s._we]).sort((a, b) => a[0] - b[0]);
+      let crewTime = 0, curEnd = -1;
+      spans.forEach(([a, b]) => { const from = Math.max(a, curEnd); if (b > from) crewTime += b - from; curEnd = Math.max(curEnd, b); });
+      const totals = c.active.map(i => perTech[i].total);
+      const sameTotals = totals.every(v => v === totals[0]);
+
+      const body = '<div class="program-table">' + c.segs.map(s => {
+        const subset = s.members.length < c.active.length;
+        let line = `<div class="program-seg">
+          <span class="program-task">${s.locked ? '<span title="Manuel atama">📌 </span>' : ''}${escHtml(s.task)}</span>
+          <span class="program-time">${m2t(s.start)} - ${m2t(s.end)}</span>
+        </div>`;
+        if (subset) line += `<div class="small program-meta-line" style="color:var(--muted)">👥 ${s.members.map(i => escHtml(perTech[i].name)).join(', ')}</div>`;
+        const hasRegular = isGroup && s.members.some(i => perTech[i].role === 'regular');
+        const supMembers = isGroup ? s.members.filter(i => perTech[i].role === 'supervisor') : [];
+        if (hasRegular && supMembers.length) {
+          // Aynı işte aynı saatte çalışan Supervisor denetler.
+          line += `<div class="small program-meta-line" style="color:var(--accent)">↳ Denetim: ${supMembers.map(i => escHtml(perTech[i].name)).join(', ')} (${m2t(s.start)}-${m2t(s.end)})</div>`;
+        } else if (hasRegular) {
+          const attr = attributeSupervision(s._ws, s._we, techObjs, techRoles, technicians, s.taskId);
+          if (attr.covered.length > 0) {
+            const supList = attr.covered.map(cv => `${escHtml(cv.supName)} (${m2t(workToReal(cv.start, 'start'))}-${m2t(workToReal(cv.end, 'end'))})`).join(', ');
+            line += `<div class="small program-meta-line" style="color:var(--accent)">↳ Denetim: ${supList}</div>`;
+          }
+          if (!attr.fullyCovered) {
+            line += `<div class="small program-meta-line" style="color:var(--danger)">⚠ Denetimsiz: ${m2t(workToReal(attr.uncoveredFrom, 'start'))}-${m2t(workToReal(s._we, 'end'))}</div>`;
+          }
+        }
+        return line;
+      }).join('') + '</div>';
+
+      window._waCopyData[idx] = {
+        names: c.active.map(i => perTech[i].name),
+        total: minutesToHoursStr(crewTime),
+        segs: c.segs.map(s => ({ task: s.task, s: m2t(s.start), e: m2t(s.end),
+          who: s.members.length < c.active.length ? s.members.map(i => perTech[i].name).join(', ') : '' }))
+      };
+
+      techHtml += `<div class="tech-program-block">
+        <div class="tech-program-header">
+          <div class="tech-program-header-left">
+            <span class="tech-program-name"><span>${c.active.length > 1 ? '👥' : '👤'} ${c.active.map(nameWithRole).join(' + ')}</span></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <span class="tech-program-total">${sameTotals ? 'Toplam' : 'Ekip süresi'}: <strong>${minutesToHoursStr(sameTotals ? totals[0] : crewTime)} sa</strong></span>
+            <button class="btn-wa-copy" onclick="copyWA(${idx})">${waIcon} <span>WhatsApp</span></button>
+          </div>
+        </div>
+        ${sameTotals ? '' : `<div class="small program-meta-line" style="color:var(--muted);margin:0 0 6px 0">${c.active.map(i => `${escHtml(perTech[i].name)}: ${minutesToHoursStr(perTech[i].total)} sa`).join(' · ')}</div>`}
+        ${body}
+      </div>`;
+    });
+    techHtml += `<div class="small" style="color:var(--muted);margin-top:4px">Kişi bazında toplam ve boşluklar</div>
+      <table class="table" style="margin-top:8px"><tr><th>Teknisyen</th><th>Toplam</th><th>Boşluk</th></tr>${summaryRows}</table>`;
+    techHtml += `</div></details>`;
+    html += techHtml;
+
+    // ==========================================================
+    // 👑 B1 Teknisyen Zaman Listesi
+    // ==========================================================
+    if (headObj) {
+      const allHeadSegs = headObj.segments.filter(s => s.taskId !== -1).sort((a,b) => a.start - b.start);
+      let headDisplayHtml = '';
+      if (allHeadSegs.length > 0) {
+        const b1OnlyKeys = new Set(headOverflowAssignments
+          .filter(h => h.type === 'b1Only' || h.type === 'b1OnlyFallback')
+          .map(h => `${h.start}-${h.end}-${h.taskId}`));
+        headDisplayHtml = '<div class="b1-list">' + allHeadSegs.map(s => {
+          const realStart = m2t(workToReal(s.start, 'start'));
+          const realEnd = m2t(workToReal(s.end, 'end'));
+          const isB1Only = s.kind === 'b1only' || b1OnlyKeys.has(`${s.start}-${s.end}-${s.taskId}`);
+          const isSupport = s.kind === 'support';
+          const isOpenB1 = tasksCopy.find(t => t.id === s.taskId)?.isOpen;
+          const tag = isB1Only ? '<span class="b1-only-tag">B1-only</span>'
+            : isSupport ? '<span class="b1-only-tag" title="Teknisyenlere sığmayan kalan süre B1 boş zamanına yerleştirildi">B1 iş desteği</span>'
+            : (isOpenB1 ? '<span class="b1-only-tag">OPEN fill</span>' : '');
+          return `<div class="b1-row${isB1Only ? ' b1-only' : ''}">
+            <div class="b1-main-line">
+              <span class="b1-task">${escHtml(s.taskName)}</span>
+              <span class="b1-time">${realStart} - ${realEnd}</span>
+            </div>
+            ${tag ? `<div class="b1-meta-line">${tag}</div>` : ''}
+          </div>`;
+        }).join('') + '</div>';
+      } else {
+        headDisplayHtml = '<div class="small" style="color:var(--muted)">B1 teknisyenine atanmış görev yok.</div>';
+      }
+      const headWorkTotal = allHeadSegs.reduce((s, seg) => s + (seg.end - seg.start), 0);
+      const headOverflowTotal = headOverflowAssignments.reduce((s, h) => s + (h.end - h.start), 0);
+      const headSupportTotal = headSupportAssignments.reduce((s, h) => s + (h.end - h.start), 0);
+      html += `<div class="card"><h2>👑 B1 Teknisyen Zaman Listesi <span class="role-tag head">${escHtml(headTech || '—')}</span></h2><div class="small" style="color:var(--muted);margin-bottom:8px">B1 için otomatik ayarlanan onay / B1-only zaman aralıkları aşağıdadır. Bu liste Supervisor Grup modunda da hesaplanır.</div>${headDisplayHtml}`;
+      html += `<div class="stat" style="margin-top:10px">
+        Toplam B1 yükü: <strong>${minutesToHoursStr(headWorkTotal)} saat</strong>
+        ${headOverflowTotal > 0 ? ` – B1’e özel atanan iş yükü: <strong style="color:var(--warn)">${minutesToHoursStr(headOverflowTotal)} saat</strong>` : ''}
+        ${headSupportTotal > 0 ? ` – Kalan işe B1 iş desteği: <strong style="color:var(--warn)">${minutesToHoursStr(headSupportTotal)} saat</strong>` : ''}
+      </div>`;
+      html += `</div>`;
+    }
+
+    if (isGroup) {
+      const coverage = buildSupervisorCoverage(techObjs, techRoles);
+      if (coverage.length === 0) {
+        const covHtml = '<div class="warning" style="margin-top:0">⚠ Hiçbir Supervisor’e iş atanamadığı için denetim aralığı oluşmadı.</div>';
+        html += `<div class="card"><h2>🛡 Supervisor Denetim Pencereleri</h2>${covHtml}</div>`;
+      }
+    }
+
+    const earlyApprovals = R.earlyApprovals;
+    if (earlyApprovals.length > 0) {
+      const rows = earlyApprovals.map(w => `<div class="small">⚠ <strong>${escHtml(w.taskName)}</strong> – B1 onayı ${m2t(workToReal(w.from, 'start'))} - ${m2t(workToReal(w.to, 'end'))}; işte bu saatten sonra da çalışma var (son çalışma bitişi ${m2t(workToReal(w.taskEnd, 'end'))}).</div>`).join('');
+      html += `<div class="attention"><strong>⚠ B1 Onayı İş Bitişinden Önce</strong><br><div class="small" style="margin:6px 0">B1'in uygun boş zamanı bulunamadığı için aşağıdaki işlerin onayı, işin son çalışma saatinden önceye yerleştirildi. Gerekirse B1 dolu saatlerini veya iş dağılımını gözden geçirin.</div>${rows}</div>`;
+    }
+
+    if (isGroup && supervisionGaps.length > 0) {
+      const gapHtml = supervisionGaps.map(g => `<div class="small">⚠ <strong>${escHtml(g.techName)}</strong> – ${escHtml(g.taskName)} işi denetimsiz: ${m2t(g.from)} - ${m2t(g.to)}</div>`).join('');
+      html += `<div class="warning"><strong>⛔ Denetim Açığı</strong><br><div class="small" style="color:var(--danger);margin:6px 0">Bu Teknisyenlerin işleri en az bir Supervisor olmadan başlatılamaz. Programı revize edin veya Supervisor saatlerini güncelleyin.</div>${gapHtml}</div>`;
+    }
+
+    if (isGroup) {
+      const idleNames = perTech.filter(p => p.segs.length === 0).map(p => p.name);
+      if (idleNames.length > 0) {
+        html += `<div class="attention"><strong>⚠ Atama Yapılmayan Teknisyenler</strong><br><div class="small" style="color:var(--warn);margin-top:6px">Aşağıdaki teknisyenlere zaman aralığı atanamadı (yetersiz iş yükü veya denetim penceresi sorunu olabilir): ${idleNames.map(escHtml).join(', ')}</div></div>`;
+      }
+    }
+
+    if(headUnallocated.length > 0){
+      const headUnallocatedByTask = {};
+      headUnallocated.forEach(u => {
+        if (!headUnallocatedByTask[u.task]) headUnallocatedByTask[u.task] = { totalMinutes: 0, taskName: u.task };
+        headUnallocatedByTask[u.task].totalMinutes += u.minutes;
+      });
+      const headUnallocHtml = Object.values(headUnallocatedByTask).map(u => {
+        const unallocHours = (u.totalMinutes / 60).toFixed(2).replace('.', ',');
+        return `<div class="small">${escHtml(u.taskName)} – B1 için ${unallocHours} saat atanamadı</div>`;
+      }).join('');
+      html += `<div class="warning"><strong>⚠️ Atanamayan Onay Süreleri (B1)</strong><br>${headUnallocHtml}</div>`;
+    }
+
+    if (finalUnallocated.length > 0) {
+      const finalUnallocHtml = finalUnallocated.map(u => {
+        const unallocHours = (u.minutes / 60).toFixed(2).replace('.', ',');
+        return `<div class="small">${escHtml(u.task)} – ${unallocHours} saat hiçbir yere atanamadı (${escHtml(u.reason)})</div>`;
+      }).join('');
+      html += `<div class="warning"><strong>⚠️ Tamamen Atanamayan İşler</strong><br>${finalUnallocHtml}</div>`;
+    }
+
+    if (isGroup && unallocated.length > 0 && finalUnallocated.length === 0) {
+      const aggregated = {};
+      unallocated.forEach(u => {
+        if (!aggregated[u.task]) aggregated[u.task] = { minutes: 0, reasons: new Set() };
+        aggregated[u.task].minutes += u.minutes;
+        aggregated[u.task].reasons.add(u.reason);
+      });
+      const items = Object.entries(aggregated).map(([name, info]) => {
+        const h = (info.minutes / 60).toFixed(2).replace('.', ',');
+        const reasons = Array.from(info.reasons).join('; ');
+        return `<div class="small">${escHtml(name)} – ${h} saat atanamadı (${escHtml(reasons)})</div>`;
+      }).join('');
+      if (items) html += `<div class="attention"><strong>⚠ Atanamayan İş Parçaları</strong><br><div class="small" style="margin:6px 0">Aşağıdaki süreler hiçbir teknisyene yerleştirilemedi.</div>${items}</div>`;
+    }
+
+    const aiData = {
+      calisma_sistemi: isGroup ? "Grup (Supervisor Denetimli)" : "Herkes Bağımsız",
+      dagitim_hassasiyeti: sensitivityText(),
+      secili_senaryo: R.spec.crews.map(c => c.map(i => technicians[i]).join(" + ")).join(" | "),
+      toplam_is_sayisi: tasks.length,
+      toplam_sure: totalInputHours.toFixed(2) + " saat",
+      // Ekrandaki "📋 İşler" listesinin birebir karşılığı: her işe ayrılması gereken süre.
+      is_listesi: tasks.map(t => ({
+        is_no: t.name,
+        ayrilacak_sure_saat: parseFloat(t.hours) || 0,
+        tip: t.open ? "OPEN" : "Zorunlu"
+      })),
+      is_bazinda_plan: tasks.map((t, i) => ({
+        is_no: t.name,
+        girilen_sure: (parseFloat(t.hours) || 0).toFixed(2) + " saat",
+        tip: t.open ? "OPEN" : "Zorunlu",
+        teknisyen_atamalari: perTech.flatMap(p => p.segs
+          .filter(s => s.taskId === i)
+          .map(s => ({ teknisyen: p.name, baslangic: m2t(s.start), bitis: m2t(s.end) })))
+          .sort((a, b) => a.baslangic.localeCompare(b.baslangic)),
+        b1_onay: headObj ? headObj.segments.filter(s => s.taskId === i)
+          .map(s => ({ baslangic: m2t(workToReal(s.start, 'start')), bitis: m2t(workToReal(s.end, 'end')), ...(s.kind === 'support' ? { tur: 'B1 iş desteği' } : s.kind === 'b1only' ? { tur: 'B1-only' } : {}) })) : []
+      })),
+      teknisyen_atamalari: perTech.map(p => ({
+        teknisyen: p.name,
+        rol: p.role,
+        toplam_sure: minutesToHoursStr(p.total) + " sa",
+        atanan_isler: p.segs.map(s => ({
+          is_no: s.task,
+          baslangic: m2t(s.start),
+          bitis: m2t(s.end)
+        }))
+      })),
+      b1_atamalari: headObj ? headObj.segments.filter(s => s.taskId !== -1).map(s => ({
+        is_no: s.taskName,
+        baslangic: m2t(workToReal(s.start, 'start')),
+        bitis: m2t(workToReal(s.end, 'end')),
+        ...(s.kind === 'support' ? { tur: 'B1 iş desteği' } : s.kind === 'b1only' ? { tur: 'B1-only' } : {})
+      })) : [],
+      tek_is_esit_paylasim: equalShareSummary || undefined,
+      atanmayan_isler: finalUnallocated.map(u => ({
+        is_no: u.task,
+        sure: (u.minutes / 60).toFixed(2) + " sa",
+        sebep: u.reason
       }))
-    })),
-    b1_atamalari: headObj ? headObj.segments.filter(s => s.taskId !== -1).map(s => ({
-      is_no: s.taskName,
-      baslangic: m2t(workToReal(s.start, 'start')),
-      bitis: m2t(workToReal(s.end, 'end')),
-      ...(s.kind === 'support' ? { tur: 'B1 iş desteği' } : s.kind === 'b1only' ? { tur: 'B1-only' } : {})
-    })) : [],
-    tek_is_esit_paylasim: equalShareSummary || undefined,
-    atanmayan_isler: finalUnallocated.map(u => ({
-      is_no: u.task,
-      sure: (u.minutes / 60).toFixed(2) + " sa",
-      sebep: u.reason
-    }))
+    };
+    window._aiCopyData = JSON.stringify(aiData, null, 2);
+
+    html += `<button class="btn-ai-copy" id="btnAiCopy" onclick="copyAIVerisi()">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2L9.2 8.6 2 9.2l5.4 4.7-1.7 6.9 6.3-3.8 6.3 3.8-1.7-6.9L22 9.2l-7.2-.6L12 2z"/></svg> 
+      <span>🤖 AI İçin Tüm Planı Kopyala</span>
+    </button>`;
+
+    html += `<div class="footer-warning">⚠️ Bu planlama bir öneridir. Gerçek durumlarda işyeri prosedürlerine ve operasyonel ihtiyaçlara göre değişiklik yapılabilir.</div>`;
+    resultsDiv.innerHTML = html;
+    if (view.keepScroll) {
+      window.scrollTo({ top: view.scrollY || 0 });
+    } else {
+      // Plan oluşunca doğrudan "Teknisyenlerin Programı" bölümüne git.
+      const scrollTarget = $('techProgram') || resultsDiv;
+      window.scrollTo({ top: scrollTarget.getBoundingClientRect().top + window.scrollY - 20, behavior: 'smooth' });
+    }
+  }
+
+  const scenarios = buildAllScenarios();
+  window._asdpShowPlan = (o, scrollY) => {
+    renderPlan({ list: scenarios, ...pickScenario(scenarios, chosenScenario), ...(o || {}), scrollY: scrollY === undefined ? window.scrollY : scrollY });
   };
-  window._aiCopyData = JSON.stringify(aiData, null, 2);
-
-  html += `<button class="btn-ai-copy" id="btnAiCopy" onclick="copyAIVerisi()">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2L9.2 8.6 2 9.2l5.4 4.7-1.7 6.9 6.3-3.8 6.3 3.8-1.7-6.9L22 9.2l-7.2-.6L12 2z"/></svg> 
-    <span>🤖 AI İçin Tüm Planı Kopyala</span>
-  </button>`;
-
-  html += `<div class="footer-warning">⚠️ Bu planlama bir öneridir. Gerçek durumlarda işyeri prosedürlerine ve operasyonel ihtiyaçlara göre değişiklik yapılabilir.</div>`;
-  resultsDiv.innerHTML = html;
-  // Plan oluşunca doğrudan "Teknisyenlerin Programı" bölümüne git.
-  const scrollTarget = $('techProgram') || resultsDiv;
-  window.scrollTo({ top: scrollTarget.getBoundingClientRect().top + window.scrollY - 20, behavior: 'smooth' });
+  window._asdpShowPlan(opts, startScrollY);
 }
 
 // WhatsApp metni parçaları: vardiya/yemek/çay tüm personel için aynıdır.
@@ -2875,7 +2876,7 @@ function waShiftLines() {
 }
 const waGroupHeader = data => `${data.names.length > 1 ? '👥' : '👷'} *${data.names.join(', ')}*\n⏳ Toplam: ${data.total} saat\n`;
 const waTaskLines = data => data.segs.length
-  ? data.segs.map(s => `🔹 ${s.s} - ${s.e} | ${s.task}\n`).join('')
+  ? data.segs.map(s => `🔹 ${s.s} - ${s.e} | ${s.task}${s.who ? ` (${s.who})` : ''}\n`).join('')
   : `⚠ Atanmış iş yok.\n`;
 function waCopy(text, doneMsg) {
   navigator.clipboard.writeText(text).then(() => {

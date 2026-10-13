@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Uçak Bakım İş Planlama Sistemi – v22.0</title>
-<link rel="stylesheet" href="style.css?v=20261013c"/>
+<link rel="stylesheet" href="style.css?v=20261013d"/>
 </head>
 <body class="mode-all">
 <a href="https://ovarthy-bot.github.io/navigasyon/" class="home-btn" title="Ana Sayfaya Git">🏠</a>
@@ -26,13 +26,20 @@
     </div>
   </details>
 
-  <!-- Algoritma Seçimi (collapsed) -->
+  <!-- Dağıtım Algoritması: hassasiyet çubuğu (collapsed) -->
   <details class="collapsible" id="algoDetails">
     <summary>🧠 Dağıtım Algoritması <span class="small" id="algoSummaryNote" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
     <div class="body">
-      <div class="mode-row" id="algoRow">
-        <label data-algo="b1_priority"><input type="radio" name="algoMode" value="b1_priority"> B1 Öncelikli Yöntem <span class="small" style="margin-left:6px">(İşler süreye göre eşit paylaştırılır)</span></label>
-        <label data-algo="tech_priority"><input type="radio" name="algoMode" value="tech_priority"> Teknisyen Öncelikli Yöntem <span class="small" style="margin-left:6px">(Teknisyene bölmeden tam iş atamaya çalışır)</span></label>
+      <div class="sens-box">
+        <div class="sens-head">
+          <label for="sensitivity"><strong>Hassasiyet</strong></label>
+          <span class="sens-value" id="sensitivityValue"></span>
+        </div>
+        <input type="range" id="sensitivity" class="sens-range" min="0" max="100" step="5" value="50" aria-label="Hassasiyet: sol teknisyen eşitliği, sağ B1 düzeni">
+        <div class="sens-ends">
+          <span class="sens-end"><strong>◀ Teknisyen eşitliği</strong><span class="small">Tüm teknisyenler aynı işleri aynı saat aralıklarında yapar</span></span>
+          <span class="sens-end sens-end-right"><strong>B1 düzeni ▶</strong><span class="small">B1 onay aralıkları düzenli olur, diğerleri B1'e göre ayarlanır</span></span>
+        </div>
       </div>
       <div class="small" id="algoDescription" style="margin-top:8px;color:var(--muted)"></div>
     </div>
@@ -131,6 +138,6 @@
   </div>
 </div>
 
-<script src="script.js?v=20261013c"></script>
+<script src="script.js?v=20261013d"></script>
 </body>
 </html>

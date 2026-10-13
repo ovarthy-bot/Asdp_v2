@@ -16,17 +16,19 @@ debug_probe = '''  window.__debugPlan = {
     technicians: techObjs.map(t => ({ name: t.name, role: t.role,
       segments: t.segments.map(s => ({ taskId: s.taskId, start: s.start, end: s.end, locked: !!s.locked })) })),
     b1Segments: headObj ? headObj.segments.map(s => ({ taskId: s.taskId, start: s.start, end: s.end, kind: s.kind || null })) : [],
-    unallocated: [...unallocated, ...finalUnallocated, ...headUnallocated].map(u => ({ task: u.task, taskId: u.taskId, minutes: u.minutes, reason: u.reason }))
+    unallocated: [...unallocated, ...finalUnallocated, ...headUnallocated].map(u => ({ task: u.task, taskId: u.taskId, minutes: u.minutes, reason: u.reason })),
+    crews: R.spec.crews, metrics: R.metrics, picked: R.spec.key, auto: view.auto,
+    scenarios: view.list.map(r => ({ key: r.spec.key, crews: r.spec.crews, metrics: r.metrics }))
   };
   resultsDiv.innerHTML = html;
 '''
-needle = '  resultsDiv.innerHTML = html;\n  // Plan oluşunca'
+needle = '    resultsDiv.innerHTML = html;\n    if (view.keepScroll)'
 if needle not in js:
     raise SystemExit('Cannot find final plan render marker for test instrumentation')
-js = js.replace(needle, debug_probe + '  // Plan oluşunca', 1)
+js = js.replace(needle, debug_probe + '    if (view.keepScroll)', 1)
 css = css.replace(css.split('\n')[0], '')  # Skip external font loading in tests.
-html = html.replace('<link rel="stylesheet" href="style.css?v=20261013c"/>', '<style>' + css + '</style>')
-html = html.replace('<script src="script.js?v=20261013c"></script>', '<script>' + js + '</script>')
+html = html.replace('<link rel="stylesheet" href="style.css?v=20261013d"/>', '<style>' + css + '</style>')
+html = html.replace('<script src="script.js?v=20261013d"></script>', '<script>' + js + '</script>')
 mock = """<script>(()=>{const d=new Map();Object.defineProperty(window,'localStorage',{configurable:true,value:{getItem:k=>d.has(k)?d.get(k):null,setItem:(k,v)=>d.set(k,String(v)),removeItem:k=>d.delete(k),clear:()=>d.clear()}})})();</script>"""
 html = html.replace('</head>', mock + '</head>')
 
@@ -104,7 +106,7 @@ with sync_playwright() as p:
 
     page.locator('#algoDetails').evaluate('(el) => el.open = true')
     page.locator('#modeDetails').evaluate('(el) => el.open = true')
-    page.locator('#algoRow input[value="b1_priority"]').check()
+    check('Hassasiyet çubuğu 0-100 aralığında ve varsayılan 50', page.locator('#sensitivity').get_attribute('min') == '0' and page.locator('#sensitivity').get_attribute('max') == '100' and page.locator('#sensitivity').input_value() == '50')
     page.locator('#modeRow input[value="group"]').check()
     clean_role_values(page, ['supervisor', 'regular', 'qualified'])
     page.locator('#planBtn').click(timeout=5000)
@@ -115,10 +117,8 @@ with sync_playwright() as p:
     team_page = browser.new_page()
     team_page.on('pageerror', lambda e: errors.append(str(e)))
     team_page.set_content(html, wait_until='domcontentloaded', timeout=10000)
-    team_page.locator('#algoDetails').evaluate('(el) => el.open = true')
     team_page.locator('#modeDetails').evaluate('(el) => el.open = true')
     team_page.locator('#modeRow input[value="group"]').check()
-    team_page.locator('#algoRow input[value="tech_priority"]').check()
     clean_role_values(team_page, ['supervisor', 'regular', 'regular'])
     team_page.locator('#planBtn').click(timeout=5000)
     debug = team_page.evaluate('window.__debugPlan')
@@ -126,7 +126,7 @@ with sync_playwright() as p:
     team_overalloc = [f"{task['name']}: {totals.get(task['id'], 0)} > {task['rawMin']} dakika"
                       for task in debug['tasks'] if not task['isOpen'] and task['rawMin'] > 0
                       and totals.get(task['id'], 0) > task['rawMin']]
-    check('Teknisyen Öncelikli algoritma işçilik tahminini aşmıyor', not team_overalloc, '; '.join(team_overalloc) or str(totals))
+    check('Dağıtım algoritması işçilik tahminini aşmıyor', not team_overalloc, '; '.join(team_overalloc) or str(totals))
 
     team_page.locator('#preAssignDetails').evaluate('(el) => el.open = true')
     team_page.locator('#preAssignTechSelect').select_option('1')
@@ -214,7 +214,7 @@ with sync_playwright() as p:
         'asdp_shiftStart': '12:45', 'asdp_shiftEnd': '19:45',
         'asdp_breakStart': '15:00', 'asdp_breakEnd': '16:00',
         'asdp_teaBreakStart': '17:30', 'asdp_teaBreakEnd': '18:00',
-        'asdp_planMode': 'group', 'asdp_algoMode': 'b1_priority',
+        'asdp_planMode': 'group', 'asdp_sensitivity': '50',
     }
     seed_js = ''.join(f"localStorage.setItem({json.dumps(k)}, {json.dumps(v if isinstance(v, str) else json.dumps(v))});" for k, v in seed_values.items())
     b1_page = browser.new_page()
@@ -223,9 +223,9 @@ with sync_playwright() as p:
     b1_page.locator('#planBtn').click(timeout=5000)
     b1_debug = b1_page.evaluate('window.__debugPlan')
     b1_totals = task_minutes(b1_debug)
-    b1_left = sum(u['minutes'] for u in b1_debug['unallocated'] if u['task'] == 'NRC 1' and u['reason'].startswith('Teknisyen ve B1'))
+    b1_left = sum(u['minutes'] for u in b1_debug['unallocated'] if u['reason'].startswith('Teknisyen ve B1'))
     check('Kısmen atanan işin kalanı B1 boş zamanına yerleşiyor', sum(b1_totals.values()) == 44 * 60 and b1_left == 60,
-          f"Yerleşen: {sum(b1_totals.values())} dk (beklenen 2640); NRC 1 atanamayan: {b1_left} dk (beklenen 60)")
+          f"Yerleşen: {sum(b1_totals.values())} dk (beklenen 2640); atanamayan: {b1_left} dk (beklenen 60)")
     b1_text = b1_page.locator('#results').inner_text()
     check('B1 iş desteği listede ayrı gösteriliyor', 'B1 iş desteği' in b1_text, b1_text[-200:].replace('\n', ' | '))
 
@@ -283,7 +283,7 @@ with sync_playwright() as p:
     part_values = {
         'asdp_tasks': [{'name': 'J1', 'hours': 7}, {'name': 'J2', 'hours': 11.5}, {'name': 'J3', 'hours': 6}],
         'asdp_techs': ['T1', 'T2', 'T3'], 'asdp_techRoles': ['regular', 'supervisor', 'qualified'],
-        'asdp_shiftStart': '08:00', 'asdp_shiftEnd': '16:00', 'asdp_planMode': 'group', 'asdp_algoMode': 'b1_priority',
+        'asdp_shiftStart': '08:00', 'asdp_shiftEnd': '16:00', 'asdp_planMode': 'group', 'asdp_sensitivity': '50',
         'asdp_techBlocks': [[{'start': '09:45', 'end': '13:30'}], [], []],
     }
     part_js = ''.join(f"localStorage.setItem({json.dumps(k)}, {json.dumps(v if isinstance(v, str) else json.dumps(v))});" for k, v in part_values.items())
@@ -296,6 +296,73 @@ with sync_playwright() as p:
     part_minutes = sum(s['end'] - s['start'] for s in part_reg)
     check('Kısa müsait aralığı olan Teknisyen o aralıkta çalıştırılıyor ve denetimli', bool(part_reg) and part_reg[0]['start'] == 0 and part_minutes >= 240 and not unpaired_regular_pieces(part_debug),
           f"ilk parça: {part_reg[0] if part_reg else None}; toplam: {part_minutes} dk; eşleşmeyen: {unpaired_regular_pieces(part_debug)[:3]}")
+
+    # Hassasiyet çubuğu, senaryo seçimi ve "her teknisyen tek ekipte" düzeni (yeterli kapasiteli 7 kişilik plan).
+    scn_values = {
+        'asdp_tasks': [{'name': f'NRC {i + 1}', 'hours': h} for i, h in enumerate([2, 3, 1, 4, 6, 0.5])],
+        'asdp_techs': ['ilhan', 'emin', 'metin', 'davut', 'onur', 'gizem', 'serdar'],
+        'asdp_techRoles': ['supervisor', 'supervisor', 'regular', 'regular', 'regular', 'regular', 'qualified'],
+        'asdp_shiftStart': '08:00', 'asdp_shiftEnd': '16:00', 'asdp_breakStart': '12:00', 'asdp_breakEnd': '12:45',
+        'asdp_planMode': 'group', 'asdp_sensitivity': '0',
+    }
+    scn_js = ''.join(f"localStorage.setItem({json.dumps(k)}, {json.dumps(v if isinstance(v, str) else json.dumps(v))});" for k, v in scn_values.items())
+    scn_page = browser.new_page()
+    scn_page.on('pageerror', lambda e: errors.append(str(e)))
+    scn_page.set_content(html.replace('</head>', f'<script>{scn_js}</script></head>'), wait_until='domcontentloaded', timeout=10000)
+    check('Hassasiyet çubuğu kayıtlı değeri gösteriyor', scn_page.locator('#sensitivity').input_value() == '0')
+    scn_page.locator('#planBtn').click(timeout=5000)
+    scn0 = scn_page.evaluate('window.__debugPlan')
+    chip_count = scn_page.locator('#results .scn-chip').count()
+    check('Adam saat dağıtımı birden fazla ekip düzeniyle yapılabiliyorsa senaryolar listeleniyor', chip_count >= 2 and len(scn0['scenarios']) == chip_count, f'chip: {chip_count}')
+    check('Hassasiyet solda iken tüm teknisyenler tek ekipte (otomatik öneri)', len(scn0['crews']) == 1 and scn0['auto'], str(scn0['crews']))
+
+    def card_names(page):
+        return page.evaluate("() => [...document.querySelectorAll('.tech-program-name')].map(e => e.textContent)")
+    def techs_in_multiple_cards(page, techs):
+        headers = card_names(page)
+        return [t for t in techs if sum(1 for h in headers if t in h) > 1]
+    scn_techs = scn_values['asdp_techs']
+    check('Her teknisyen Teknisyenlerin Programında tek bir kartta (grupta)', not techs_in_multiple_cards(scn_page, scn_techs), str(card_names(scn_page)))
+
+    def b1_regularity(debug):
+        ends = sorted(s['end'] for s in debug['b1Segments'] if s['taskId'] >= 0 and not s.get('kind'))
+        if len(ends) <= 2:
+            return 1.0
+        gaps = [b - a for a, b in zip(ends, ends[1:])]
+        mean = sum(gaps) / len(gaps)
+        return max(0.0, 1 - (sum((g - mean) ** 2 for g in gaps) / len(gaps)) ** 0.5 / mean) if mean else 0.0
+    def set_slider(page, value):
+        page.locator('#sensitivity').evaluate("(el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }", str(value))
+    reg_left = b1_regularity(scn0)
+    set_slider(scn_page, 100)
+    scn100 = scn_page.evaluate('window.__debugPlan')
+    reg_right = b1_regularity(scn100)
+    check('Hassasiyet sağa çekilince B1 onay aralıkları daha düzenli', reg_right > reg_left + 0.1, f'sol: {reg_left:.2f}, sağ: {reg_right:.2f}')
+    check('Hassasiyet sağdayken de Teknisyen parçaları Supervisor ile birebir', not unpaired_regular_pieces(scn100), '; '.join(unpaired_regular_pieces(scn100)[:3]))
+    set_slider(scn_page, 0)
+
+    # Her senaryo seçildiğinde plan kuralları korunur ve her teknisyen tek kartta kalır.
+    bad_scenarios = []
+    for i in range(scn_page.locator('#results .scn-chip').count()):
+        scn_page.locator('#results .scn-chip').nth(i).click()
+        dbg = scn_page.evaluate('window.__debugPlan')
+        problems = unpaired_regular_pieces(dbg) + [f'çoklu kart: {t}' for t in techs_in_multiple_cards(scn_page, scn_techs)]
+        totals = task_minutes(dbg)
+        problems += [f"{t['name']}: {totals.get(t['id'], 0)} > {t['rawMin']}" for t in dbg['tasks'] if not t['isOpen'] and totals.get(t['id'], 0) > t['rawMin']]
+        for tech in dbg['technicians']:
+            segs = sorted((x for x in tech['segments']), key=lambda x: x['start'])
+            problems += [f"{tech['name']} çakışma" for a, b in zip(segs, segs[1:]) if b['start'] < a['end']]
+        if scn_page.locator('#results .scn-chip.active').count() != 1:
+            problems.append('seçili senaryo işaretli değil')
+        if problems:
+            bad_scenarios.append(f'senaryo {i + 1}: ' + '; '.join(problems[:3]))
+    check('Her senaryoda denetim, birebir eşleşme, süre sınırı ve çakışmasızlık korunuyor', not bad_scenarios, ' | '.join(bad_scenarios))
+    last_key = scn_page.evaluate('window.__debugPlan')['scenarios'][-1]['key']
+    scn_page.locator('#results .scn-chip').last.click()
+    manual = scn_page.evaluate('window.__debugPlan')
+    check('Kullanıcı senaryoyu kendisi seçebiliyor', not manual['auto'] and manual['picked'] == last_key, f"{manual['picked']} / {manual['auto']}")
+    scn_page.locator('#results .scn-auto').click()
+    check('Otomatik seçime dönülebiliyor', scn_page.evaluate('window.__debugPlan')['auto'] is True)
 
     check('Tarayıcı JavaScript hatası yok', len(errors) == 0, '; '.join(errors[:5]))
     browser.close()
