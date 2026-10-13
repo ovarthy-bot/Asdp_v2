@@ -25,8 +25,8 @@ if needle not in js:
     raise SystemExit('Cannot find final plan render marker for test instrumentation')
 js = js.replace(needle, debug_probe + '  // Plan oluşunca', 1)
 css = css.replace(css.split('\n')[0], '')  # Skip external font loading in tests.
-html = html.replace('<link rel="stylesheet" href="style.css?v=20261013b"/>', '<style>' + css + '</style>')
-html = html.replace('<script src="script.js?v=20261013b"></script>', '<script>' + js + '</script>')
+html = html.replace('<link rel="stylesheet" href="style.css?v=20261013c"/>', '<style>' + css + '</style>')
+html = html.replace('<script src="script.js?v=20261013c"></script>', '<script>' + js + '</script>')
 mock = """<script>(()=>{const d=new Map();Object.defineProperty(window,'localStorage',{configurable:true,value:{getItem:k=>d.has(k)?d.get(k):null,setItem:(k,v)=>d.set(k,String(v)),removeItem:k=>d.delete(k),clear:()=>d.clear()}})})();</script>"""
 html = html.replace('</head>', mock + '</head>')
 
@@ -248,6 +248,54 @@ with sync_playwright() as p:
     early = [f"{appr_debug['tasks'][s['taskId']]['name']}: onay bitişi {s['end']}, işin bitişi {job_end[s['taskId']]}"
              for s in appr_debug['b1Segments'] if s['taskId'] >= 0 and not s.get('kind') and s['taskId'] in job_end and job_end[s['taskId']] > s['end']]
     check('B1 onayı işin son çalışma saatinden önce kalmıyor', not early, '; '.join(early))
+
+    # Regresyon: Teknisyen parçası, onu denetleyen Supervisor parçasıyla aynı iş ve birebir aynı aralıkta olmalı.
+    def unpaired_regular_pieces(debug):
+        sups = [t for t in debug['technicians'] if t['role'] == 'supervisor']
+        missing = []
+        for tech in debug['technicians']:
+            if tech['role'] != 'regular':
+                continue
+            for seg in tech['segments']:
+                if seg['taskId'] < 0:
+                    continue
+                if not any(o['taskId'] == seg['taskId'] and o['start'] == seg['start'] and o['end'] == seg['end']
+                           for sup in sups for o in sup['segments']):
+                    missing.append(f"{tech['name']} iş {seg['taskId']} {seg['start']}-{seg['end']}")
+        return missing
+    check('Teknisyen parçaları Supervisor parçalarıyla birebir aynı aralıkta (7 kişilik NRC planı)', not unpaired_regular_pieces(b1_debug), '; '.join(unpaired_regular_pieces(b1_debug)[:5]))
+    check('Teknisyen parçaları Supervisor parçalarıyla birebir aynı aralıkta (dolu saatli plan)', not unpaired_regular_pieces(appr_debug), '; '.join(unpaired_regular_pieces(appr_debug)[:5]))
+
+    # Bölme adımı: farklı sınırlı bloklar birbirinin sınırından bölünür, zaten birebir olan bloğa dokunulmaz.
+    align_result = page.evaluate("""() => {
+      const mk = (role, segs) => ({ role, segments: segs.map(([start, end, taskId]) => ({ start, end, taskId, taskName: 'İş' })) });
+      const techs = [mk('supervisor', [[0, 75, 0]]), mk('regular', [[0, 60, 0]])];
+      alignSupervisionPieces(techs, ['supervisor', 'regular']);
+      const same = [mk('supervisor', [[0, 60, 0]]), mk('regular', [[0, 60, 0]])];
+      alignSupervisionPieces(same, ['supervisor', 'regular']);
+      return { sup: techs[0].segments.map(s => [s.start, s.end]), reg: techs[1].segments.map(s => [s.start, s.end]),
+               sameSup: same[0].segments.length, sameReg: same[1].segments.length };
+    }""")
+    check('Supervisor bloğu Teknisyen bloğunun sınırından bölünüyor; birebir olana dokunulmuyor',
+          align_result == {'sup': [[0, 60], [60, 75]], 'reg': [[0, 60]], 'sameSup': 1, 'sameReg': 1}, str(align_result))
+
+    # Regresyon: Teknisyenin müsait olduğu kısa aralık (dolu saatten önce) ekip penceresi uzun diye boş kalmamalı.
+    part_values = {
+        'asdp_tasks': [{'name': 'J1', 'hours': 7}, {'name': 'J2', 'hours': 11.5}, {'name': 'J3', 'hours': 6}],
+        'asdp_techs': ['T1', 'T2', 'T3'], 'asdp_techRoles': ['regular', 'supervisor', 'qualified'],
+        'asdp_shiftStart': '08:00', 'asdp_shiftEnd': '16:00', 'asdp_planMode': 'group', 'asdp_algoMode': 'b1_priority',
+        'asdp_techBlocks': [[{'start': '09:45', 'end': '13:30'}], [], []],
+    }
+    part_js = ''.join(f"localStorage.setItem({json.dumps(k)}, {json.dumps(v if isinstance(v, str) else json.dumps(v))});" for k, v in part_values.items())
+    part_page = browser.new_page()
+    part_page.on('pageerror', lambda e: errors.append(str(e)))
+    part_page.set_content(html.replace('</head>', f'<script>{part_js}</script></head>'), wait_until='domcontentloaded', timeout=10000)
+    part_page.locator('#planBtn').click(timeout=5000)
+    part_debug = part_page.evaluate('window.__debugPlan')
+    part_reg = sorted((s for s in part_debug['technicians'][0]['segments'] if s['taskId'] >= 0), key=lambda s: s['start'])
+    part_minutes = sum(s['end'] - s['start'] for s in part_reg)
+    check('Kısa müsait aralığı olan Teknisyen o aralıkta çalıştırılıyor ve denetimli', bool(part_reg) and part_reg[0]['start'] == 0 and part_minutes >= 240 and not unpaired_regular_pieces(part_debug),
+          f"ilk parça: {part_reg[0] if part_reg else None}; toplam: {part_minutes} dk; eşleşmeyen: {unpaired_regular_pieces(part_debug)[:3]}")
 
     check('Tarayıcı JavaScript hatası yok', len(errors) == 0, '; '.join(errors[:5]))
     browser.close()

@@ -74,7 +74,8 @@ function applyModeUI(){
     desc.innerHTML = 'Süpervizör grup modu — 3 rol:<br>' +
       '• <strong>Supervisor</strong>: hem iş yapar hem <strong>aynı işte</strong> aynı saatte çalışan Teknisyenleri denetler. Bir Supervisor aynı işte birden fazla Teknisyene denetim yapabilir; bir Teknisyene farklı zamanlarda birden fazla Supervisor da denetim yapabilir.<br>' +
       '• <strong>Kalifiyeli</strong>: tek başına çalışabilir, denetim aramaz, denetleme yapmaz (Kalifiyeli ile Teknisyen Supervisor olmadan birlikte çalışamaz).<br>' +
-      '• <strong>Teknisyen</strong>: yalnızca <strong>aynı işte</strong> en az bir Supervisor’ün çalıştığı saatlerde iş alabilir; asla denetimsiz çalışmaz.';
+      '• <strong>Teknisyen</strong>: yalnızca <strong>aynı işte</strong> en az bir Supervisor’ün çalıştığı saatlerde iş alabilir; asla denetimsiz çalışmaz.<br>' +
+      'Teknisyen ile onu denetleyen Supervisor <strong>aynı iş ve birebir aynı saat aralığında</strong> listelenir; Supervisor ve Teknisyen blokları farklı yerde başlayıp bitiyorsa bloklar, birbirinin sınırlarından bölünerek eşleştirilir.';
   }
 }
 
@@ -882,6 +883,89 @@ function relocateSupervisorWork(techObjs, roles, gapStart, gapEnd, taskId){
   return false;
 }
 
+// Grup modunda her Teknisyen parçası, aynı işte ve birebir aynı saat aralığında çalışan bir Supervisor
+// parçasıyla eşleşir. Plan zaten böyle kurulmuşsa hiçbir şey bölünmez; farklı sınırlara sahip bloklar
+// (ör. Supervisor 08:00-09:15, Teknisyen 08:00-09:00) yalnızca birbirini denetleyen blok kümesi
+// içinde, birbirinin sınırlarından bölünür. Çalışılan zaman, kişi yükleri ve iş toplamları değişmez;
+// yalnızca bitişik parçalar artık birleştirilmez. Fazladan denetleyen Supervisor'ler ve Kalifiyeli
+// parçaları bölünmez. Plan tamamlandıktan sonra, çıktıdan hemen önce çağrılmalıdır.
+function alignSupervisionPieces(techObjs, roles){
+  const byTask = new Map();
+  techObjs.forEach((tech, idx) => tech.segments.forEach(seg => {
+    if (seg.taskId == null || seg.taskId === -1) return;
+    if (!byTask.has(seg.taskId)) byTask.set(seg.taskId, []);
+    byTask.get(seg.taskId).push({ seg, role: roles[idx] });
+  }));
+
+  const cutsOf = new Map(); // seg -> bölme noktaları
+  byTask.forEach(items => {
+    const regs = items.filter(x => x.role === 'regular');
+    const sups = items.filter(x => x.role === 'supervisor');
+    if (!regs.length || !sups.length) return;
+
+    const parent = new Map();
+    const find = x => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
+    const join = (a, b) => parent.set(find(a), find(b));
+    items.forEach(x => parent.set(x, x));
+
+    // 1) Birebir aynı aralıkta Supervisor parçası olan Teknisyen parçaları bölünmeden eşleşir.
+    const used = new Set();
+    const pending = [];
+    regs.forEach(r => {
+      const exact = sups.find(x => x.seg.start === r.seg.start && x.seg.end === r.seg.end);
+      if (exact) { join(r, exact); used.add(exact); } else pending.push(r);
+    });
+    // 2) Kalanlara tek bir Supervisor parçası atanır (en az fazlalıklı, daha önce atananlar tercih edilir);
+    //    tek parça yetmiyorsa en uzağa uzanan Supervisor parçaları zincirlenir.
+    pending.sort((a, b) => (b.seg.end - b.seg.start) - (a.seg.end - a.seg.start));
+    pending.forEach(r => {
+      const whole = sups.filter(x => x.seg.start <= r.seg.start && x.seg.end >= r.seg.end)
+        .sort((a, b) => (used.has(b) - used.has(a)) || ((a.seg.end - a.seg.start) - (b.seg.end - b.seg.start)));
+      if (whole.length) { join(r, whole[0]); used.add(whole[0]); return; }
+      let cursor = r.seg.start;
+      while (cursor < r.seg.end) {
+        let best = null;
+        for (const x of sups) {
+          if (x.seg.start > cursor || x.seg.end <= cursor) continue;
+          if (!best || used.has(x) > used.has(best) || (used.has(x) === used.has(best) && x.seg.end > best.seg.end)) best = x;
+        }
+        if (!best) break;
+        join(r, best); used.add(best); cursor = best.seg.end;
+      }
+    });
+
+    // 3) Her küme yalnızca kendi bloklarının sınırlarından bölünür.
+    const groupPoints = new Map();
+    items.forEach(x => {
+      const g = find(x);
+      if (!groupPoints.has(g)) groupPoints.set(g, { members: [], points: new Set() });
+      const entry = groupPoints.get(g);
+      entry.members.push(x);
+      entry.points.add(x.seg.start); entry.points.add(x.seg.end);
+    });
+    groupPoints.forEach(({ members, points }) => {
+      if (members.length < 2) return;
+      const sorted = [...points].sort((a, b) => a - b);
+      members.forEach(x => {
+        const inner = sorted.filter(p => p > x.seg.start && p < x.seg.end);
+        if (inner.length) cutsOf.set(x.seg, inner);
+      });
+    });
+  });
+  if (!cutsOf.size) return;
+
+  techObjs.forEach(tech => {
+    const out = [];
+    tech.segments.forEach(seg => {
+      const inner = cutsOf.get(seg);
+      if (!inner) { out.push(seg); return; }
+      let from = seg.start;
+      inner.concat(seg.end).forEach(to => { out.push({ ...seg, start: from, end: to }); from = to; });
+    });
+    tech.segments = out.sort((a, b) => a.start - b.start);
+  });
+}
+
 function ensureNoIdleTech(techObjs, roles, isGroup){
   for (let iter = 0; iter < 200; iter++) {
     const idle = techObjs.find(t => t.totalMin === 0 && t.freeCapacity >= 15);
@@ -1380,6 +1464,79 @@ function plan(){
     });
   }
 
+  // Grup modu ekip yerleşimi: blok tek kişiye değil, aynı pencerede çalışacak bir ekibe verilir.
+  // Pencerenin sahibi en az yüklü kişidir; sahibi Teknisyen ise aynı pencerede boş bir Supervisor
+  // zorunlu olarak ekibe katılır. Pencerede boş olan diğer kişiler de (yük sırasıyla) aynı pencereye
+  // alınır. Böylece Teknisyenin bloğu, onu denetleyen Supervisor'ün bloğuyla birebir aynı iş ve aynı
+  // saat aralığında olur. Harcanan süre üye sayısı x pencere uzunluğudur ve kalan işçilik bütçesini
+  // aşmaz: bütçe tüm ekibe yetmiyorsa pencere kısaltılır, o da olmazsa üye sayısı azaltılır.
+  // Başarılı olursa yerleştirilen toplam dakikayı, olmazsa 0 döner.
+  function placeGroupWave(task, size, remaining){
+    const roleOf = t => techRoles[t.index];
+    const byLoad = (a, b) => a.totalMin - b.totalMin || a.index - b.index;
+    // [s, s+len) penceresinde çalışabilecek ekip (sahip + gerekiyorsa Supervisor + pencerede boş olanlar).
+    function crew(x, s, len){
+      const e = s + len;
+      // Eşit yükte fazladan Supervisor, Teknisyen/Kalifiyeli'den sonra gelir (denetim için bir tane yeter).
+      const others = techObjs.filter(y => y !== x && isFreeRange(y, s, e))
+        .sort((a, b) => byLoad(a, b) || (roleOf(a) === 'supervisor') - (roleOf(b) === 'supervisor') || a.index - b.index);
+      const xRole = roleOf(x);
+      let host = xRole === 'supervisor' ? x : null;
+      if (!host && (xRole === 'regular' || others.some(y => roleOf(y) === 'regular'))) host = others.find(y => roleOf(y) === 'supervisor') || null;
+      if (xRole === 'regular' && !host) return null;
+      const members = [x];
+      if (host && host !== x) members.push(host);
+      for (const y of others) {
+        if (members.includes(y)) continue;
+        if (roleOf(y) === 'regular' && !host) continue;
+        members.push(y);
+      }
+      return members;
+    }
+    for (const x of pickCandidates()) {
+      const minMembers = roleOf(x) === 'regular' ? 2 : 1;
+      for (const [fs, fe] of getFreeIntervals(x)) {
+        for (let s = fs; s + 15 <= fe; s += 15) {
+          let len = Math.min(size, floor15(fe - s));
+          // Daha kısa süre müsait olan kişileri (dolu saati yaklaşan) de ekibe alabilmek için pencere, en çok
+          // kişinin katılabildiği uzunluğa çekilir; işin kalanı sonraki dalgada devam eder.
+          const runs = new Set();
+          techObjs.forEach(y => {
+            if (y === x || y.segments.some(sg => sg.start <= s && sg.end > s)) return; // s anında zaten dolu
+            let next = _workEnd_offset;
+            y.segments.forEach(sg => { if (sg.start > s && sg.start < next) next = sg.start; });
+            const run = floor15(next - s);
+            if (run >= 30 && run < len) runs.add(run);
+          });
+          let bestCount = (crew(x, s, len) || []).length;
+          runs.forEach(run => {
+            const c = (crew(x, s, run) || []).length;
+            if (c > bestCount || (c === bestCount && run > len && c > 0)) { bestCount = c; len = run; }
+          });
+          let members = null;
+          for (let guard = 0; guard < 6 && len >= 15; guard++) {
+            members = crew(x, s, len);
+            if (!members || members.length * len <= remaining) break;
+            const shorter = floor15(remaining / members.length);
+            if (shorter >= 15 && shorter < len) { len = shorter; members = null; continue; }
+            if (len > 15) { len = 15; members = null; continue; }
+            const fit = Math.floor(remaining / len);
+            members = fit >= minMembers ? members.slice(0, fit) : null;
+            break;
+          }
+          if (!members || len < 15) continue;
+          members.forEach(m => {
+            m.segments.push({ start: s, end: s + len, taskId: task.id, taskName: task.name });
+            m.totalMin += len;
+            taskSegments.get(task.id).push({ techIndex: m.index, start: s, end: s + len });
+          });
+          return members.length * len;
+        }
+      }
+    }
+    return 0;
+  }
+
   function scheduleTaskList(taskList, options){
     options = options || {};
     const isOpenFill = !!options.openFill;
@@ -1409,6 +1566,11 @@ function plan(){
           const trySize = (attempt === 0) ? blockSize : Math.max(15, floor15(blockSize * 0.7));
           const finalSize = Math.min(trySize, remainingWork);
           if (finalSize < 15) break;
+
+          if (isGroup && !isOpenFill) {
+            const waveMin = placeGroupWave(task, finalSize, remainingWork);
+            if (waveMin > 0) { remainingWork -= waveMin; placed = true; break; }
+          }
 
           for (const tech of candidates) {
             let result;
@@ -2281,6 +2443,9 @@ function plan(){
     enforceSupervision();
     rescueLeftoverWork();
   }
+
+  // Teknisyen parçalarını, onları denetleyen Supervisor parçalarıyla birebir aynı aralığa getir.
+  if (isGroup) alignSupervisionPieces(techObjs, techRoles);
 
   if (isGroup) {
     techObjs.forEach((tech, idx) => {

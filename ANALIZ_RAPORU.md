@@ -103,6 +103,24 @@ Birçok iş vardiya sonunda aynı anda bitince B1'in son dilimleri yetmiyor, yal
 
 **Bilinen sınır:** Rastgele senaryolarda ihlal oranı yaklaşık %22'den %4–6'ya (aşırı yüklü senaryolarda %8–12) indi; sıfırlanması garanti değildir. Yer değiştirme kişi başına ortalama parça sayısını yaklaşık 0,15–0,25 artırır.
 
+### 14. Teknisyenlerin Supervisor'lerle dağınık eşleşmesi
+
+Grup modunda her Teknisyen dakikası aynı işte çalışan bir Supervisor ile kapsanıyordu (denetim kuralı ihlal edilmiyordu), ancak kapsama yalnızca "aynı işte, aynı anda en az bir Supervisor var" düzeyindeydi. Teknisyen bloğu ile onu denetleyen Supervisor bloğu farklı saatlerde başlayıp bitiyor (ör. Supervisor 08:00–09:15, Teknisyen 08:00–09:00) veya tek bir Teknisyen bloğu art arda birkaç Supervisor'ün parçalarıyla örtülüyordu. Kartlarda bu, `Denetim: A (…), B (…)` satırlarıyla dağınık görünüyordu. Rastgele senaryolarda B1 Öncelikli yöntemde Teknisyen bloklarının %49-59'u, Teknisyen Öncelikli yöntemde %12-25'i bu durumdaydı.
+
+**Yeni davranış:** Grup modunda Teknisyen ile onu denetleyen Supervisor **aynı iş ve birebir aynı saat aralığında** listelenir. İki adımla sağlanır:
+- **Ekip penceresi (B1 Öncelikli, `placeGroupWave`):** Blok tek kişiye değil, aynı pencerede çalışacak bir ekibe verilir. Pencerenin sahibi en az yüklü kişidir; sahibi Teknisyen ise aynı pencerede boş bir Supervisor zorunlu olarak ekibe katılır, pencerede boş olan diğer kişiler de yük sırasıyla alınır. Bütçe tüm ekibe yetmiyorsa önce pencere kısaltılır, olmazsa üye sayısı azaltılır (kalan dakikalar eşit yükte önce Teknisyen/Kalifiyeli'ye, fazladan Supervisor'e en son verilir). Dolu saati yaklaşan bir kişinin kısa müsait aralığı boşa gitmesin diye pencere, en çok kişinin katılabildiği uzunluğa çekilir. Ekip kurulamazsa eski kişi bazlı yerleştirme devreye girer; kapasite kaybı olmaz.
+- **Birebir eşleştirme (`alignSupervisionPieces`, her iki algoritma):** Plan bittikten sonra her Teknisyen parçasına bir Supervisor parçası atanır (aynı aralıkta olan önce; yoksa onu tamamen kapsayan en az fazlalıklı olan; o da yoksa en uzağa uzanan Supervisor parçaları zincirlenir). Farklı sınırlara sahip bloklar yalnızca birbirini denetleyen blok kümesi içinde, birbirinin sınırlarından bölünür. Zaten birebir olan hiçbir şey bölünmez; fazladan denetleyen Supervisor'ler ve Kalifiyeli parçaları bölünmez. Çalışılan zaman, kişi yükleri, iş toplamları ve B1 onayları değişmez; yalnızca bitişik parçalar artık birleştirilmez. Kartlar, WhatsApp metni ve `AI İçin Tüm Planı Kopyala` çıktısı bu parçaları kullanır.
+- Denetim kuralı aynen geçerlidir: Teknisyene yalnızca aynı işte Supervisor'ün çalıştığı aralıklar verilir. Supervisor ALL modu değişmedi.
+
+**Ölçüm (eski ve yeni kod, rastgele senaryolar; sade, mola/dolu saat/manuel atama/OPEN içeren ve kısa vardiya/az Supervisor gibi uç senaryolar):**
+- Supervisor parçasıyla birebir eşleşen Teknisyen parçası oranı: B1 Öncelikli %41-51 → **%100**, Teknisyen Öncelikli %75-88 → **%100** (her iki yöntemde 9000 senaryoda eksiksiz).
+- Çökme yok; çakışma, vardiya dışı çalışma, denetimsiz Teknisyen dakikası ve (B1 Öncelikli'de) iş tahmini aşımı yok.
+- B1 Öncelikli'de yerleşen toplam süre sade senaryolarda +%0,5, zengin senaryolarda +%0,9 arttı, atanamayan süre sade senaryolarda yaklaşık %7, zengin senaryolarda yaklaşık %4 azaldı; kişi yükleri arasındaki ortalama fark küçüldü (sade 38 → 18 dk). Aşırı yüklü uç senaryolarda sonuç nötr (±%0,1).
+- Kullanıcının 7 kişilik NRC 1-6 senaryosunda 6 Teknisyen bloğunun 6'sı birebir (eski sürümde 4/6).
+- Supervisor ALL modu 500 senaryoda eski sürümle birebir aynı çıktıyı verdi.
+
+**Bilinen sınır / bedel:** Süre işçilik birimine (15 dk) tam bölünmediğinde bir ekip diğerinden 15 dk uzun çalışır; bu fark yukarıdaki bölmeyle ayrı bir parça olarak görünür. Dolu saat ve mola nedeniyle kısmen müsait olan kişiler de aynı etkiyi yapar. Bu nedenle toplam parça sayısı eski sürüme göre B1 Öncelikli'de sade senaryolarda yaklaşık %12-16, mola/dolu saat/manuel atama içeren senaryolarda yaklaşık %25-29, Teknisyen Öncelikli'de yaklaşık %10-18 arttı. Toplam süre ve kişi yükleri değişmez; yalnızca aynı iş birden çok satıra bölünerek gösterilir.
+
 ## Korunan özellikler
 
 - Supervisor ALL ve Supervisor Grup çalışma modları.
@@ -130,6 +148,10 @@ Birçok iş vardiya sonunda aynı anda bitince B1'in son dilimleri yetmiyor, yal
 Son koşuda **17/17 kontrol başarılı**, `node --check script.js` başarılıdır. Bu testler senaryolarla doğrulama sağlar; tüm olası teknisyen/iş/mola kombinasyonlarının matematiksel kanıtı değildir.
 
 **B1 iş desteği değişikliği (madde 12):** `test_asdp.py`'ye 3 kontrol eklendi (toplam 20): kapasite israf edilmiyor (44 sa yerleşiyor, NRC 1'den yalnızca 1,00 sa atanamıyor), B1 iş desteği listede ayrı görünüyor ve B1 onayı işin son çalışma saatinden önce kalmıyor (madde 13). Bu kontrollerin eşdeğeri jsdom ile doğrulandı; Playwright/Chromium düzeneği bu değişiklik sırasında çalıştırılamadı, kullanıma almadan önce `test_asdp.py` yeniden koşturulmalıdır. Ek olarak eski ve yeni kod, rastgele üretilen senaryolarda (2–9 personel, 1–8 iş, her iki mod/algoritma, mola, dolu saat, manuel atama, OPEN iş) karşılaştırıldı (3000 senaryo): yeni kod çakışma veya denetimsiz Teknisyen çalışması üretmedi ve hiç çökmedi. Zorunlu işlerde yerleşen süre 2999 senaryoda eşit ya da daha fazlaydı; yalnızca bir aşırı yüklü senaryoda (B1'de 4 boş dilim) 15 dk daha az yerleşti. Bir senaryoda `tech_priority`'nin önceden var olan fazla atama sorunu (+15 dk), iş artık B1 kuralıyla düşmediği için görünür oldu.
+
+**Birebir eşleşme değişikliği (madde 14):** `test_asdp.py`'ye 4 kontrol eklendi (toplam 24): 7 kişilik NRC planında ve dolu saatli planda her Teknisyen parçasının Supervisor ile birebir aynı aralıkta olması, bölme adımının bloğu doğru sınırdan bölüp birebir olana dokunmaması ve dolu saati yaklaşan Teknisyenin kısa müsait aralığının boş kalmaması. Bu değişiklik sırasında da Playwright/Chromium düzeneği çalıştırılamadı; bu nedenle mantık, uygulamanın `plan()` fonksiyonunu sahte bir DOM ile Node içinde çalıştıran bir düzenekle (9000 rastgele senaryo, her iki algoritma, sade/zengin/uç senaryolar; kural ihlali, çakışma, vardiya dışı çalışma, denetimsiz Teknisyen ve tahmin aşımı kontrolleriyle), `alignSupervisionPieces` için 2715 geçerli rastgele plan üzerinde özellik testiyle (süre/yük değişmez, bölünen parçalar çakışmaz, her Teknisyen parçasının birebir eşi vardır, zaten birebir olan plana dokunulmaz) ve gerçek tarayıcıda (uygulama arayüzünden plan oluşturma, konsol hatası yok) doğrulandı. Mevcut kontrollerin denk karşılıkları da yeni kodla geçti. Kullanıma almadan önce `test_asdp.py` yeniden koşturulmalıdır.
+
+**Önceden var olan, bu değişiklikle ilgisiz bulgu:** Teknisyen Öncelikli yöntemde bazı senaryolarda bir işin toplamı (Teknisyenler + B1 onayı) girilen tahmini 15 dk aşabiliyor (ör. 5 kişi: 3 Kalifiyeli, 1 Supervisor, 1 Teknisyen; 5 sa ve 7 sa'lık iki iş; 08:00-16:00; 7 sa'lık iş 435 dk planlanıyor). Eski sürümde de aynı sayıda görülüyor; ayrıca ele alınmalıdır.
 
 ## Kurulum
 
