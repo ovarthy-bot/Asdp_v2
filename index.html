@@ -1,140 +1,329 @@
 <!doctype html>
-<html lang="tr">
+<html lang="tr" class="dark">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Uçak Bakım İş Planlama Sistemi – v22.0</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          display: ['Outfit', 'Inter', 'system-ui', 'sans-serif'],
+        }
+      }
+    }
+  };
+</script>
 <link rel="stylesheet" href="style.css?v=20261013e"/>
 </head>
-<body class="mode-all">
-<a href="https://ovarthy-bot.github.io/navigasyon/" class="home-btn" title="Ana Sayfaya Git">🏠</a>
-<div class="container" id="container">
-  <header>
-    <h1>✈️ Adam Saat Dağıtma Uygulaması <span style="font-size: 0.8em; opacity: 0.8; font-weight: 400;">v22.0</span></h1>
-    <div class="header-dev">Geliştirici: ovar@thy.com</div>
+<body class="mode-all min-h-screen text-slate-100 antialiased selection:bg-sky-500/30 selection:text-sky-200">
+<div class="container max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8 space-y-4 sm:space-y-5" id="container">
+
+  <!-- Üst Başlık -->
+  <header class="rounded-2xl border border-slate-800/90 bg-slate-900/80 backdrop-blur-xl px-4 py-3.5 sm:px-6 sm:py-4 shadow-xl shadow-black/25 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div class="flex items-center gap-3 min-w-0">
+      <a href="https://ovarthy-bot.github.io/navigasyon/" class="home-btn inline-flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl border border-slate-700/80 bg-slate-800/70 text-lg hover:border-sky-500/60 hover:bg-sky-500/15 hover:shadow-lg hover:shadow-sky-500/15 transition-all" title="Ana Sayfaya Git">🏠</a>
+      <div class="min-w-0">
+        <h1 class="font-display text-base sm:text-xl font-semibold text-white tracking-tight flex flex-wrap items-center gap-2">
+          <span>✈️ Adam Saat Dağıtma Uygulaması</span>
+          <span class="inline-flex items-center rounded-md bg-sky-500/15 px-2 py-0.5 text-xs font-medium text-sky-300 ring-1 ring-inset ring-sky-500/30">v22.0</span>
+        </h1>
+      </div>
+    </div>
+    <div class="header-dev self-start sm:self-auto inline-flex items-center gap-2 rounded-full border border-slate-700/70 bg-slate-800/60 px-3 py-1 text-xs font-medium text-slate-300 shrink-0">
+      <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+      <span>Geliştirici: ovar@thy.com</span>
+    </div>
   </header>
 
   <!-- Çalışma Modu (collapsed) -->
-  <details class="collapsible" id="modeDetails">
-    <summary>⚙️ Çalışma Sistemi <span class="small" id="modeSummaryNote" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
-    <div class="body">
-      <div class="mode-row" id="modeRow">
-        <label data-mode="all"><input type="radio" name="planMode" value="all"> Supervisor ALL <span class="small" style="margin-left:6px">(Tek B1 onaylı klasik mod)</span></label>
-        <label data-mode="group"><input type="radio" name="planMode" value="group"> Supervisor Grup <span class="small" style="margin-left:6px">(Çoklu süpervizör + Kalifiyeli + Teknisyen)</span></label>
+  <details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-lg shadow-black/20 overflow-hidden transition-colors open:border-slate-700/90" id="modeDetails">
+    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+      <span class="font-display text-sm sm:text-base font-semibold text-slate-100 flex items-center gap-2.5 min-w-0">
+        <span class="shrink-0">⚙️</span>
+        <span class="truncate">Çalışma Sistemi</span>
+      </span>
+      <span class="flex items-center gap-2.5 shrink-0 max-w-[55%] sm:max-w-[65%]">
+        <span class="small truncate rounded-full border border-slate-700/70 bg-slate-800/70 px-2.5 py-0.5 text-xs font-medium text-slate-300 empty:hidden" id="modeSummaryNote"></span>
+        <svg class="h-4 w-4 shrink-0 text-sky-400 transition-transform duration-200 group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+        </svg>
+      </span>
+    </summary>
+    <div class="body border-t border-slate-800/80 px-4 py-4 sm:px-6 sm:py-5">
+      <div class="mode-row grid grid-cols-1 md:grid-cols-2 gap-3" id="modeRow">
+        <label data-mode="all" class="flex items-start gap-3 rounded-xl border border-slate-700/80 bg-slate-950/60 p-3.5 sm:p-4 cursor-pointer transition-all hover:border-slate-600 [&.active]:border-sky-500 [&.active]:bg-sky-500/10 [&.active]:ring-1 [&.active]:ring-sky-500/40">
+          <input type="radio" name="planMode" value="all" class="mt-0.5 h-4 w-4 shrink-0 accent-sky-500 cursor-pointer">
+          <span class="flex flex-col gap-0.5 min-w-0">
+            <span class="text-sm font-semibold text-white">Supervisor ALL</span>
+            <span class="small text-xs text-slate-400">(Tek B1 onaylı klasik mod)</span>
+          </span>
+        </label>
+        <label data-mode="group" class="flex items-start gap-3 rounded-xl border border-slate-700/80 bg-slate-950/60 p-3.5 sm:p-4 cursor-pointer transition-all hover:border-slate-600 [&.active]:border-sky-500 [&.active]:bg-sky-500/10 [&.active]:ring-1 [&.active]:ring-sky-500/40">
+          <input type="radio" name="planMode" value="group" class="mt-0.5 h-4 w-4 shrink-0 accent-sky-500 cursor-pointer">
+          <span class="flex flex-col gap-0.5 min-w-0">
+            <span class="text-sm font-semibold text-white">Supervisor Grup</span>
+            <span class="small text-xs text-slate-400">(Çoklu süpervizör + Kalifiyeli + Teknisyen)</span>
+          </span>
+        </label>
       </div>
-      <div class="small" id="modeDescription" style="margin-top:8px;color:var(--muted)"></div>
+      <div class="small mt-3 rounded-xl border border-slate-800/80 bg-slate-950/50 p-3.5 text-xs sm:text-sm text-slate-400 leading-relaxed [&_strong]:font-semibold [&_strong]:text-slate-200" id="modeDescription"></div>
     </div>
   </details>
 
   <!-- Dağıtım Algoritması: hassasiyet çubuğu (collapsed) -->
-  <details class="collapsible" id="algoDetails">
-    <summary>🧠 Dağıtım Algoritması <span class="small" id="algoSummaryNote" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
-    <div class="body">
-      <div class="sens-box">
-        <div class="sens-head">
-          <label for="sensitivity"><strong>Hassasiyet</strong></label>
-          <span class="sens-value" id="sensitivityValue"></span>
+  <details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-lg shadow-black/20 overflow-hidden transition-colors open:border-slate-700/90" id="algoDetails">
+    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+      <span class="font-display text-sm sm:text-base font-semibold text-slate-100 flex items-center gap-2.5 min-w-0">
+        <span class="shrink-0">🧠</span>
+        <span class="truncate">Dağıtım Algoritması</span>
+      </span>
+      <span class="flex items-center gap-2.5 shrink-0 max-w-[55%] sm:max-w-[65%]">
+        <span class="small truncate rounded-full border border-slate-700/70 bg-slate-800/70 px-2.5 py-0.5 text-xs font-medium text-slate-300 empty:hidden" id="algoSummaryNote"></span>
+        <svg class="h-4 w-4 shrink-0 text-sky-400 transition-transform duration-200 group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+        </svg>
+      </span>
+    </summary>
+    <div class="body border-t border-slate-800/80 px-4 py-4 sm:px-6 sm:py-5">
+      <div class="sens-box rounded-xl border border-slate-800/90 bg-slate-950/60 p-4 sm:p-5">
+        <div class="sens-head flex items-center justify-between gap-3 mb-3.5">
+          <label for="sensitivity" class="text-sm font-semibold text-slate-100">Hassasiyet</label>
+          <span class="sens-value inline-flex items-center rounded-full border border-sky-500/30 bg-sky-500/15 px-3 py-0.5 text-xs font-semibold text-sky-300 tabular-nums" id="sensitivityValue"></span>
         </div>
-        <input type="range" id="sensitivity" class="sens-range" min="0" max="100" step="5" value="50" aria-label="Hassasiyet: sol teknisyen eşitliği, sağ B1 düzeni">
-        <div class="sens-ends">
-          <span class="sens-end"><strong>◀ Teknisyen eşitliği</strong><span class="small">Ekipteki herkes aynı işi aynı saat aralığında yapar, iş parçaları en aza iner</span></span>
-          <span class="sens-end sens-end-right"><strong>B1 düzeni ▶</strong><span class="small">B1 onay aralıkları düzenli olur, işlerin saatleri B1'e göre ayarlanır</span></span>
+        <input type="range" id="sensitivity" class="sens-range w-full" min="0" max="100" step="5" value="50" aria-label="Hassasiyet: sol teknisyen eşitliği, sağ B1 düzeni">
+        <div class="sens-ends grid grid-cols-2 gap-3 sm:gap-6 mt-3.5 pt-3 border-t border-slate-800/70">
+          <span class="sens-end flex flex-col gap-1">
+            <strong class="text-xs sm:text-sm font-semibold text-emerald-400">◀ Teknisyen eşitliği</strong>
+            <span class="small text-[11px] sm:text-xs text-slate-400 leading-snug">Ekipteki herkes aynı işi aynı saat aralığında yapar, iş parçaları en aza iner</span>
+          </span>
+          <span class="sens-end sens-end-right flex flex-col gap-1 text-right items-end">
+            <strong class="text-xs sm:text-sm font-semibold text-sky-400">B1 düzeni ▶</strong>
+            <span class="small text-[11px] sm:text-xs text-slate-400 leading-snug">B1 onay aralıkları düzenli olur, işlerin saatleri B1'e göre ayarlanır</span>
+          </span>
         </div>
       </div>
-      <div class="small" id="algoDescription" style="margin-top:8px;color:var(--muted)"></div>
+      <div class="small mt-3 rounded-xl border border-slate-800/80 bg-slate-950/50 p-3.5 text-xs sm:text-sm text-slate-400 leading-relaxed [&_strong]:font-semibold [&_strong]:text-slate-200" id="algoDescription"></div>
     </div>
   </details>
 
-  <div class="grid">
-    <div class="card">
-      <h2>📋 İşler</h2>
-      <div id="tasks"></div>
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <button class="btn btn-add" id="addTask">+ İş Ekle</button>
-        <button class="btn" id="resetTasks" style="background:#111;border:1px solid var(--border);color:var(--muted)">Reset</button>
+  <!-- İşler & Teknisyenler Ana Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
+    <!-- İşler Kartı -->
+    <div class="card flex flex-col rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl p-4 sm:p-6 shadow-xl shadow-black/25">
+      <div class="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-800/80">
+        <h2 class="font-display text-base sm:text-lg font-semibold text-sky-400 flex items-center gap-2">
+          <span>📋</span>
+          <span>İşler</span>
+        </h2>
+        <span class="text-[11px] font-medium text-slate-400">0,25 sa katları</span>
       </div>
-      <div id="tasksStat" class="stat"></div>
-      <div id="dupeWarn"></div>
+      <div class="flex items-center gap-2 px-2 sm:px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 select-none">
+        <span class="flex-1 min-w-0">İş Tanımı</span>
+        <span class="w-16 sm:w-24 shrink-0 text-center">Saat</span>
+        <span class="w-9 sm:w-11 shrink-0 text-center" title="OPEN / Zorunlu İş">Tip</span>
+        <span class="w-9 sm:w-11 shrink-0 text-center">Sil</span>
+      </div>
+      <div id="tasks" class="space-y-2"></div>
+      <div class="mt-auto pt-3.5">
+        <div class="flex items-center gap-2.5">
+          <button class="btn btn-add h-11 flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-sky-500/35 bg-sky-500/10 px-4 font-display text-sm font-semibold text-sky-300 hover:bg-sky-500 hover:text-white hover:border-sky-500 hover:shadow-lg hover:shadow-sky-500/20 active:scale-[0.99] transition-all cursor-pointer" id="addTask">+ İş Ekle</button>
+          <button class="btn h-11 shrink-0 inline-flex items-center justify-center rounded-xl border border-slate-700/80 bg-slate-800/60 px-4 font-display text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition-all cursor-pointer" id="resetTasks">Reset</button>
+        </div>
+        <div id="tasksStat" class="stat mt-3.5 rounded-xl border border-slate-800/80 border-l-4 border-l-sky-500 bg-sky-500/5 px-3.5 py-3 text-xs sm:text-sm text-slate-300 leading-relaxed tabular-nums [&_strong]:font-semibold [&_strong]:text-white"></div>
+        <div id="dupeWarn"></div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>👷 Teknisyenler</h2>
-      <div id="techs"></div>
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <button class="btn btn-add" id="addTech">+ Teknisyen Ekle</button>
-        <button class="btn" id="resetTechs" style="background:#111;border:1px solid var(--border);color:var(--muted)">Reset</button>
+    <!-- Teknisyenler Kartı -->
+    <div class="card flex flex-col rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl p-4 sm:p-6 shadow-xl shadow-black/25">
+      <div class="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-800/80">
+        <h2 class="font-display text-base sm:text-lg font-semibold text-sky-400 flex items-center gap-2">
+          <span>👷</span>
+          <span>Teknisyenler</span>
+        </h2>
+        <span class="group-only text-[11px] font-medium text-emerald-400">Grup Rolleri Aktif</span>
       </div>
-      <div id="techsStat" class="stat"></div>
+      <div class="flex items-center gap-2 px-2 sm:px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 select-none">
+        <span class="flex-1 min-w-0">Teknisyen Adı</span>
+        <span class="group-only w-32 sm:w-44 shrink-0">Rol</span>
+        <span class="w-9 sm:w-11 shrink-0 text-center">Sil</span>
+      </div>
+      <div id="techs" class="space-y-2"></div>
+      <div class="mt-auto pt-3.5">
+        <div class="flex items-center gap-2.5">
+          <button class="btn btn-add h-11 flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-sky-500/35 bg-sky-500/10 px-4 font-display text-sm font-semibold text-sky-300 hover:bg-sky-500 hover:text-white hover:border-sky-500 hover:shadow-lg hover:shadow-sky-500/20 active:scale-[0.99] transition-all cursor-pointer" id="addTech">+ Teknisyen Ekle</button>
+          <button class="btn h-11 shrink-0 inline-flex items-center justify-center rounded-xl border border-slate-700/80 bg-slate-800/60 px-4 font-display text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition-all cursor-pointer" id="resetTechs">Reset</button>
+        </div>
+        <div id="techsStat" class="stat mt-3.5 rounded-xl border border-slate-800/80 border-l-4 border-l-sky-500 bg-sky-500/5 px-3.5 py-3 text-xs sm:text-sm text-slate-300 leading-relaxed tabular-nums [&_strong]:font-semibold [&_strong]:text-white [&_.small]:text-xs [&_.small]:text-slate-400"></div>
+      </div>
     </div>
   </div>
 
   <!-- Vardiya & Mola (collapsed) -->
-  <details class="collapsible" id="shiftDetails">
-    <summary>🕒 Vardiya &amp; Yemek Molası <span class="small" id="shiftSummary" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
-    <div class="body">
-      <div class="input-pair">
-        <div class="input-group"><label>Vardiya Başlangıç</label><input type="time" id="shiftStart"></div>
-        <div class="input-group"><label>Vardiya Bitiş</label><input type="time" id="shiftEnd"></div>
+  <details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-lg shadow-black/20 overflow-hidden transition-colors open:border-slate-700/90" id="shiftDetails">
+    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+      <span class="font-display text-sm sm:text-base font-semibold text-slate-100 flex items-center gap-2.5 min-w-0">
+        <span class="shrink-0">🕒</span>
+        <span class="truncate">Vardiya &amp; Yemek Molası</span>
+      </span>
+      <span class="flex items-center gap-2.5 shrink-0 max-w-[55%] sm:max-w-[65%]">
+        <span class="small truncate rounded-full border border-slate-700/70 bg-slate-800/70 px-2.5 py-0.5 text-xs font-medium text-slate-300 tabular-nums empty:hidden" id="shiftSummary"></span>
+        <svg class="h-4 w-4 shrink-0 text-sky-400 transition-transform duration-200 group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+        </svg>
+      </span>
+    </summary>
+    <div class="body border-t border-slate-800/80 px-4 py-4 sm:px-6 sm:py-5 space-y-4">
+      <div class="input-pair grid grid-cols-2 sm:grid-cols-[1fr_1fr_6.5rem] gap-3 items-end">
+        <div class="input-group flex flex-col gap-1.5">
+          <label for="shiftStart" class="text-xs font-medium text-slate-400">Vardiya Başlangıç</label>
+          <input type="time" id="shiftStart" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3.5 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        </div>
+        <div class="input-group flex flex-col gap-1.5">
+          <label for="shiftEnd" class="text-xs font-medium text-slate-400">Vardiya Bitiş</label>
+          <input type="time" id="shiftEnd" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3.5 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        </div>
+        <div class="hidden sm:block" aria-hidden="true"></div>
       </div>
-      <div class="input-pair">
-        <div class="input-group"><label>Yemek Başlangıç</label><input type="time" id="breakStart"></div>
-        <div class="input-group"><label>Yemek Bitiş</label><input type="time" id="breakEnd"></div>
-        <button class="btn" id="clearBreak" style="background:#111;color:var(--muted);border:1px solid var(--border)">Temizle</button>
+
+      <div class="input-pair grid grid-cols-2 sm:grid-cols-[1fr_1fr_6.5rem] gap-3 items-end pt-3 sm:pt-0 border-t border-slate-800/60 sm:border-0">
+        <div class="input-group flex flex-col gap-1.5">
+          <label for="breakStart" class="text-xs font-medium text-slate-400">Yemek Başlangıç</label>
+          <input type="time" id="breakStart" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3.5 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        </div>
+        <div class="input-group flex flex-col gap-1.5">
+          <label for="breakEnd" class="text-xs font-medium text-slate-400">Yemek Bitiş</label>
+          <input type="time" id="breakEnd" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3.5 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        </div>
+        <button class="btn col-span-2 sm:col-span-1 h-10 sm:h-11 w-full inline-flex items-center justify-center rounded-xl border border-slate-700/80 bg-slate-800/60 px-3 font-display text-xs sm:text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition cursor-pointer" id="clearBreak">Temizle</button>
       </div>
-      <div class="input-pair">
-        <div class="input-group"><label>Çay Başlangıç</label><input type="time" id="teaBreakStart"></div>
-        <div class="input-group"><label>Çay Bitiş</label><input type="time" id="teaBreakEnd"></div>
-        <button class="btn" id="clearTeaBreak" style="background:#111;color:var(--muted);border:1px solid var(--border)">Temizle</button>
+
+      <div class="input-pair grid grid-cols-2 sm:grid-cols-[1fr_1fr_6.5rem] gap-3 items-end pt-3 sm:pt-0 border-t border-slate-800/60 sm:border-0">
+        <div class="input-group flex flex-col gap-1.5">
+          <label for="teaBreakStart" class="text-xs font-medium text-slate-400">Çay Başlangıç</label>
+          <input type="time" id="teaBreakStart" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3.5 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        </div>
+        <div class="input-group flex flex-col gap-1.5">
+          <label for="teaBreakEnd" class="text-xs font-medium text-slate-400">Çay Bitiş</label>
+          <input type="time" id="teaBreakEnd" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3.5 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        </div>
+        <button class="btn col-span-2 sm:col-span-1 h-10 sm:h-11 w-full inline-flex items-center justify-center rounded-xl border border-slate-700/80 bg-slate-800/60 px-3 font-display text-xs sm:text-sm font-medium text-slate-300 hover:bg-slate-700 hover:text-white transition cursor-pointer" id="clearTeaBreak">Temizle</button>
       </div>
     </div>
   </details>
 
-  <!-- B1 Teknisyen Ayarları (collapsed) - sadece all modunda -->
-  <details class="collapsible" id="b1Details">
-    <summary>👑 B1 Teknisyen Ayarları <span class="small" id="b1Summary" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
-    <div class="body">
-      <div class="input-group"><label>B1 Teknisyen</label><input type="text" id="headTech" placeholder="B1 Teknisyen"></div>
-      <hr style="border-color:var(--border);margin:12px 0;">
-      <label class="small" style="color:var(--muted)">B1 Teknisyen Dolu Saatleri (Opsiyonel)</label>
-      <div id="headBlocks" style="margin-top:8px;"></div>
-      <button class="btn btn-add" id="addHeadBlock" style="padding:8px 12px;font-size:0.9rem;">+ B1 Dolu Saat Ekle</button>
+  <!-- B1 Teknisyen Ayarları (collapsed) -->
+  <details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-lg shadow-black/20 overflow-hidden transition-colors open:border-slate-700/90" id="b1Details">
+    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+      <span class="font-display text-sm sm:text-base font-semibold text-slate-100 flex items-center gap-2.5 min-w-0">
+        <span class="shrink-0">👑</span>
+        <span class="truncate">B1 Teknisyen Ayarları</span>
+      </span>
+      <span class="flex items-center gap-2.5 shrink-0 max-w-[55%] sm:max-w-[65%]">
+        <span class="small truncate rounded-full border border-slate-700/70 bg-slate-800/70 px-2.5 py-0.5 text-xs font-medium text-slate-300 empty:hidden" id="b1Summary"></span>
+        <svg class="h-4 w-4 shrink-0 text-sky-400 transition-transform duration-200 group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+        </svg>
+      </span>
+    </summary>
+    <div class="body border-t border-slate-800/80 px-4 py-4 sm:px-6 sm:py-5">
+      <div class="input-group flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 max-w-xl">
+        <label for="headTech" class="text-xs sm:text-sm font-medium text-slate-300 sm:w-36 shrink-0">B1 Teknisyen</label>
+        <input type="text" id="headTech" placeholder="B1 Teknisyen" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3.5 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+      </div>
+      <hr class="my-4 border-slate-800/80">
+      <div class="max-w-xl">
+        <label class="small block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5">B1 Teknisyen Dolu Saatleri (Opsiyonel)</label>
+        <div id="headBlocks" class="space-y-2"></div>
+        <button class="btn btn-add mt-3 h-10 sm:h-11 w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-sky-500/35 bg-sky-500/10 px-4 font-display text-sm font-semibold text-sky-300 hover:bg-sky-500 hover:text-white hover:border-sky-500 transition-all cursor-pointer" id="addHeadBlock">+ B1 Dolu Saat Ekle</button>
+      </div>
     </div>
   </details>
 
   <!-- Teknisyen Dolu Saatleri (collapsed) -->
-  <details class="collapsible" id="busyDetails">
-    <summary>⛔ Teknisyen Dolu Saatleri (Opsiyonel) <span class="small" id="busySummary" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
-    <div class="body">
-      <div class="input-group">
-        <select id="techBlockSelect"></select>
-        <input type="time" id="techBlockStart">
-        <input type="time" id="techBlockEnd">
-        <button class="btn btn-add" id="addTechBlock" style="padding:8px 12px;font-size:0.9rem;">+ Ekle</button>
+  <details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-lg shadow-black/20 overflow-hidden transition-colors open:border-slate-700/90" id="busyDetails">
+    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+      <span class="font-display text-sm sm:text-base font-semibold text-slate-100 flex items-center gap-2.5 min-w-0">
+        <span class="shrink-0">⛔</span>
+        <span class="truncate">Teknisyen Dolu Saatleri (Opsiyonel)</span>
+      </span>
+      <span class="flex items-center gap-2.5 shrink-0 max-w-[45%] sm:max-w-[60%]">
+        <span class="small truncate rounded-full border border-slate-700/70 bg-slate-800/70 px-2.5 py-0.5 text-xs font-medium text-slate-300 empty:hidden" id="busySummary"></span>
+        <svg class="h-4 w-4 shrink-0 text-sky-400 transition-transform duration-200 group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+        </svg>
+      </span>
+    </summary>
+    <div class="body border-t border-slate-800/80 px-4 py-4 sm:px-6 sm:py-5">
+      <div class="input-group grid grid-cols-2 sm:grid-cols-[1.4fr_1fr_1fr_auto] gap-3 items-end">
+        <div class="col-span-2 sm:col-span-1 flex flex-col gap-1.5">
+          <label for="techBlockSelect" class="text-xs font-medium text-slate-400">Teknisyen</label>
+          <select id="techBlockSelect" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3 text-sm text-slate-100 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition"></select>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label for="techBlockStart" class="text-xs font-medium text-slate-400">Başlangıç</label>
+          <input type="time" id="techBlockStart" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label for="techBlockEnd" class="text-xs font-medium text-slate-400">Bitiş</label>
+          <input type="time" id="techBlockEnd" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        </div>
+        <button class="btn btn-add col-span-2 sm:col-span-1 h-11 sm:px-5 inline-flex items-center justify-center gap-1.5 rounded-xl border border-sky-500/35 bg-sky-500/10 font-display text-sm font-semibold text-sky-300 hover:bg-sky-500 hover:text-white hover:border-sky-500 transition-all cursor-pointer" id="addTechBlock">+ Ekle</button>
       </div>
-      <div id="techBlocks" style="margin-top:8px;"></div>
+      <div id="techBlocks" class="mt-4 space-y-2.5 empty:mt-0"></div>
     </div>
   </details>
 
   <!-- Teknisyen Manuel/Önceden İş Atamaları (collapsed) -->
-  <details class="collapsible" id="preAssignDetails">
-    <summary>📌 Teknisyen Manuel İş Atamaları (Opsiyonel) <span class="small" id="preAssignSummary" style="margin-left:auto;margin-right:14px;color:var(--muted)"></span></summary>
-    <div class="body">
-      <div class="input-group">
-        <select id="preAssignTechSelect"></select>
-        <select id="preAssignTaskSelect"></select>
-        <input type="time" id="preAssignStart">
-        <input type="time" id="preAssignEnd">
-        <button class="btn btn-add" id="addPreAssign" style="padding:8px 12px;font-size:0.9rem;">+ Ekle</button>
+  <details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-lg shadow-black/20 overflow-hidden transition-colors open:border-slate-700/90" id="preAssignDetails">
+    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+      <span class="font-display text-sm sm:text-base font-semibold text-slate-100 flex items-center gap-2.5 min-w-0">
+        <span class="shrink-0">📌</span>
+        <span class="truncate">Teknisyen Manuel İş Atamaları (Opsiyonel)</span>
+      </span>
+      <span class="flex items-center gap-2.5 shrink-0 max-w-[45%] sm:max-w-[60%]">
+        <span class="small truncate rounded-full border border-slate-700/70 bg-slate-800/70 px-2.5 py-0.5 text-xs font-medium text-slate-300 empty:hidden" id="preAssignSummary"></span>
+        <svg class="h-4 w-4 shrink-0 text-sky-400 transition-transform duration-200 group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
+        </svg>
+      </span>
+    </summary>
+    <div class="body border-t border-slate-800/80 px-4 py-4 sm:px-6 sm:py-5">
+      <div class="input-group grid grid-cols-2 lg:grid-cols-[1.2fr_1.2fr_1fr_1fr_auto] gap-3 items-end">
+        <div class="col-span-2 sm:col-span-1 flex flex-col gap-1.5">
+          <label for="preAssignTechSelect" class="text-xs font-medium text-slate-400">Teknisyen</label>
+          <select id="preAssignTechSelect" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3 text-sm text-slate-100 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition"></select>
+        </div>
+        <div class="col-span-2 sm:col-span-1 flex flex-col gap-1.5">
+          <label for="preAssignTaskSelect" class="text-xs font-medium text-slate-400">İş</label>
+          <select id="preAssignTaskSelect" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3 text-sm text-slate-100 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition"></select>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label for="preAssignStart" class="text-xs font-medium text-slate-400">Başlangıç</label>
+          <input type="time" id="preAssignStart" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label for="preAssignEnd" class="text-xs font-medium text-slate-400">Bitiş</label>
+          <input type="time" id="preAssignEnd" class="h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/75 px-3 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        </div>
+        <button class="btn btn-add col-span-2 lg:col-span-1 h-11 lg:px-5 inline-flex items-center justify-center gap-1.5 rounded-xl border border-sky-500/35 bg-sky-500/10 font-display text-sm font-semibold text-sky-300 hover:bg-sky-500 hover:text-white hover:border-sky-500 transition-all cursor-pointer" id="addPreAssign">+ Ekle</button>
       </div>
-      <div class="small" style="margin-top:6px;color:var(--muted)">Girilen blok algoritma tarafından taşınmaz. Vardiya/dolu saat çakışmaları reddedilir; Grup modunda Teknisyen için aynı işte aynı anda Supervisor yoksa denetimsiz bölüm plana alınmaz ve uyarı gösterilir.</div>
-      <div id="preAssigns" style="margin-top:8px;"></div>
+      <div class="small mt-3 rounded-xl border border-slate-800/80 bg-slate-950/50 px-3.5 py-2.5 text-xs text-slate-400 leading-relaxed">Girilen blok algoritma tarafından taşınmaz. Vardiya/dolu saat çakışmaları reddedilir; Grup modunda Teknisyen için aynı işte aynı anda Supervisor yoksa denetimsiz bölüm plana alınmaz ve uyarı gösterilir.</div>
+      <div id="preAssigns" class="mt-4 space-y-2.5 empty:mt-0"></div>
     </div>
   </details>
 
-  <div id="results"></div>
+  <!-- Plan Sonuç Alanı -->
+  <div id="results" class="space-y-4 empty:hidden"></div>
 
-  <div class="card">
-    <button class="btn-plan" id="planBtn">🚀 İş Planını Oluştur (v22.0)</button>
+  <!-- Plan Oluşturma Butonu -->
+  <div class="card rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl p-3 sm:p-4 shadow-xl shadow-black/25">
+    <button class="btn-plan w-full rounded-xl bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500 px-6 py-4 font-display text-base sm:text-lg font-bold tracking-wide text-white shadow-lg shadow-sky-500/25 hover:brightness-110 hover:shadow-xl hover:shadow-sky-500/35 active:scale-[0.99] transition-all cursor-pointer" id="planBtn">🚀 İş Planını Oluştur (v22.0)</button>
   </div>
 </div>
 

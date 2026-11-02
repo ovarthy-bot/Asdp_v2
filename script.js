@@ -134,15 +134,15 @@ function renderTechBlocks(){
     const blocks = techBlocks[techIndex] || [];
     if(blocks.length === 0) return;
     const wrap = document.createElement('div');
-    wrap.style.marginBottom = '8px';
-    wrap.innerHTML = `<div style="color:var(--muted);margin:6px 0"><strong>${escHtml(name)}</strong></div>`;
+    wrap.className = 'rounded-xl border border-slate-800/80 bg-slate-950/50 p-3 space-y-2';
+    wrap.innerHTML = `<div class="text-xs font-semibold uppercase tracking-wider text-slate-400"><strong>${escHtml(name)}</strong></div>`;
     blocks.forEach((b, blockIndex) => {
       const row = document.createElement('div');
-      row.className = 'input-group';
+      row.className = 'input-group grid grid-cols-[1fr_1fr_auto] items-center gap-2';
       row.innerHTML = `
-        <input type="time" data-tech-i="${techIndex}" data-block-i="${blockIndex}" data-field="techblock-start" value="${b.start || ''}">
-        <input type="time" data-tech-i="${techIndex}" data-block-i="${blockIndex}" data-field="techblock-end" value="${b.end || ''}">
-        <button class="btn-del" data-deltechblock="${techIndex}:${blockIndex}" style="padding:8px 10px">×</button>
+        <input type="time" data-tech-i="${techIndex}" data-block-i="${blockIndex}" data-field="techblock-start" value="${b.start || ''}" class="h-10 w-full rounded-xl border border-slate-700/80 bg-slate-950/80 px-3 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        <input type="time" data-tech-i="${techIndex}" data-block-i="${blockIndex}" data-field="techblock-end" value="${b.end || ''}" class="h-10 w-full rounded-xl border border-slate-700/80 bg-slate-950/80 px-3 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        <button class="btn-del h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-xl border border-rose-500/25 bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white text-lg font-medium leading-none transition cursor-pointer" data-deltechblock="${techIndex}:${blockIndex}">×</button>
       `;
       wrap.appendChild(row);
     });
@@ -196,17 +196,17 @@ function renderPreAssigns(){
     const assigns = techPreAssignments[techIndex] || [];
     if(assigns.length === 0) return;
     const wrap = document.createElement('div');
-    wrap.style.marginBottom = '8px';
-    wrap.innerHTML = `<div style="color:var(--muted);margin:6px 0"><strong>${escHtml(name)}</strong></div>`;
+    wrap.className = 'rounded-xl border border-slate-800/80 bg-slate-950/50 p-3 space-y-2';
+    wrap.innerHTML = `<div class="text-xs font-semibold uppercase tracking-wider text-slate-400"><strong>${escHtml(name)}</strong></div>`;
     assigns.forEach((a, assignIndex) => {
       const taskName = tasks[a.taskId] ? tasks[a.taskId].name : 'Bilinmeyen İş';
       const row = document.createElement('div');
-      row.className = 'input-group';
+      row.className = 'input-group grid grid-cols-[1fr_1fr_auto] sm:grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_auto] items-center gap-2';
       row.innerHTML = `
-        <span style="font-size:0.9rem; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escHtml(taskName)}">${escHtml(taskName)}</span>
-        <input type="time" data-tech-p="${techIndex}" data-assign-i="${assignIndex}" data-field="preassign-start" value="${a.start || ''}">
-        <input type="time" data-tech-p="${techIndex}" data-assign-i="${assignIndex}" data-field="preassign-end" value="${a.end || ''}">
-        <button class="btn-del" data-delpreassign="${techIndex}:${assignIndex}" style="padding:8px 10px">×</button>
+        <span class="col-span-3 sm:col-span-1 h-9 sm:h-10 flex items-center truncate rounded-xl border border-slate-800 bg-slate-900/80 px-3 text-xs sm:text-sm font-medium text-slate-200" title="${escHtml(taskName)}">${escHtml(taskName)}</span>
+        <input type="time" data-tech-p="${techIndex}" data-assign-i="${assignIndex}" data-field="preassign-start" value="${a.start || ''}" class="h-10 w-full rounded-xl border border-slate-700/80 bg-slate-950/80 px-3 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        <input type="time" data-tech-p="${techIndex}" data-assign-i="${assignIndex}" data-field="preassign-end" value="${a.end || ''}" class="h-10 w-full rounded-xl border border-slate-700/80 bg-slate-950/80 px-3 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        <button class="btn-del h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-xl border border-rose-500/25 bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white text-lg font-medium leading-none transition cursor-pointer" data-delpreassign="${techIndex}:${assignIndex}">×</button>
       `;
       wrap.appendChild(row);
     });
@@ -236,26 +236,26 @@ function renderDupeWarning(){
   }
   const items = dupes.map(group => {
     const indices = group.map(g => '#' + (g.idx + 1)).join(', ');
-    return `<div>• <strong>${escHtml(group[0].name)}</strong> – ${group.length} kez (${indices})</div>`;
+    return `<div class="text-xs text-rose-200">• <strong class="font-semibold text-white">${escHtml(group[0].name)}</strong> – ${group.length} kez (${indices})</div>`;
   }).join('');
-  dupeWarnDiv.innerHTML = `<div class="warning"><strong>⛔ Mükerrer İş İsmi Var</strong><br><div class="small" style="color:var(--danger);margin-top:6px">Aşağıdaki isim(ler) birden fazla kez kullanılmış. Düzeltmeden plan oluşturulamaz:</div>${items}</div>`;
+  dupeWarnDiv.innerHTML = `<div class="warning mt-3 rounded-xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-3.5 text-sm text-rose-200 space-y-1.5"><strong class="font-semibold text-rose-300">⛔ Mükerrer İş İsmi Var</strong><div class="small text-xs text-rose-300/90">Aşağıdaki isim(ler) birden fazla kez kullanılmış. Düzeltmeden plan oluşturulamaz:</div>${items}</div>`;
   return true;
 }
 
 function renderTasks(){
   tasksDiv.innerHTML = '';
   tasks.forEach((t,i)=>{
-    const row = document.createElement('div'); row.className = 'list-item-card';
+    const row = document.createElement('div'); row.className = 'list-item-card rounded-xl border border-slate-800/80 bg-slate-950/50 p-2 sm:p-2.5 transition-colors hover:border-slate-700/80';
     row.innerHTML = `
-      <div class="list-item-row">
-        <input type="text" data-i="${i}" data-field="name" value="${escHtml(t.name)}" placeholder="İş Tanımı">
-        <input type="number" step="0.25" min="0" data-i="${i}" data-field="hours" value="${t.hours}" placeholder="Saat">
-        <label class="open-toggle" title="OPEN iş: önce zorunlu işler yerleşir; bu iş kalan boş zamanları doldurmak için kullanılır.">
+      <div class="list-item-row flex items-center gap-2 w-full">
+        <input type="text" data-i="${i}" data-field="name" value="${escHtml(t.name)}" placeholder="İş Tanımı" class="h-9 sm:h-11 flex-1 min-w-0 rounded-xl border border-slate-700/80 bg-slate-950/80 px-3 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        <input type="number" step="0.25" min="0" data-i="${i}" data-field="hours" value="${t.hours}" placeholder="Saat" class="h-9 sm:h-11 w-16 sm:w-24 shrink-0 rounded-xl border border-slate-700/80 bg-slate-950/80 px-2 text-center text-sm font-medium text-slate-100 tabular-nums placeholder-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        <label class="open-toggle h-9 w-9 sm:h-11 sm:w-11 shrink-0 inline-flex items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-base sm:text-lg leading-none cursor-pointer select-none hover:bg-amber-500/20 transition" title="OPEN iş: önce zorunlu işler yerleşir; bu iş kalan boş zamanları doldurmak için kullanılır.">
           <input type="checkbox" data-i="${i}" data-field="openTask" ${t.open ? 'checked' : ''}>
           <span class="emoji-open">📖</span>
           <span class="emoji-closed">📕</span>
         </label>
-        <button class="btn-del" data-del="${i}">×</button>
+        <button class="btn-del h-9 w-9 sm:h-11 sm:w-11 shrink-0 inline-flex items-center justify-center rounded-xl border border-rose-500/25 bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white text-lg font-medium leading-none transition cursor-pointer" data-del="${i}">×</button>
       </div>
     `;
     tasksDiv.appendChild(row);
@@ -272,16 +272,16 @@ function renderTechs(){
   techsDiv.innerHTML = '';
   technicians.forEach((t,i)=>{
     const role = techRoles[i] || 'regular';
-    const row = document.createElement('div'); row.className = 'list-item-card';
+    const row = document.createElement('div'); row.className = 'list-item-card rounded-xl border border-slate-800/80 bg-slate-950/50 p-2 sm:p-2.5 transition-colors hover:border-slate-700/80';
     row.innerHTML = `
-      <div class="list-item-row">
-        <input type="text" data-i="${i}" data-field="tech" value="${escHtml(t)}" placeholder="Teknisyen Adı">
-        <select class="role-select group-only" data-i="${i}" data-field="techRole" style="font-size: 0.95rem; padding: 0.5rem;">
+      <div class="list-item-row flex items-center gap-2 w-full">
+        <input type="text" data-i="${i}" data-field="tech" value="${escHtml(t)}" placeholder="Teknisyen Adı" class="h-9 sm:h-11 flex-1 min-w-0 rounded-xl border border-slate-700/80 bg-slate-950/80 px-3 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        <select class="role-select group-only h-9 sm:h-11 w-32 sm:w-44 shrink-0 rounded-xl border border-slate-700/80 bg-slate-950/80 px-2 sm:px-3 text-xs sm:text-sm text-slate-100 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition cursor-pointer" data-i="${i}" data-field="techRole">
           <option value="supervisor"${role==='supervisor'?' selected':''}>👷🏼‍♂️ Supervisor</option>
           <option value="qualified"${role==='qualified'?' selected':''}>🧑‍🔬 Kalifiyeli</option>
           <option value="regular"${role==='regular'?' selected':''}>👨‍🔧 Teknisyen</option>
         </select>
-        <button class="btn-del" data-deltech="${i}">×</button>
+        <button class="btn-del h-9 w-9 sm:h-11 sm:w-11 shrink-0 inline-flex items-center justify-center rounded-xl border border-rose-500/25 bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white text-lg font-medium leading-none transition cursor-pointer" data-deltech="${i}">×</button>
       </div>
     `;
     techsDiv.appendChild(row);
@@ -296,11 +296,11 @@ function renderTechs(){
 function renderHeadBlocks(){
   headBlocksDiv.innerHTML = '';
   headBlocks.forEach((b,i)=>{
-    const row = document.createElement('div'); row.className = 'input-group';
+    const row = document.createElement('div'); row.className = 'input-group grid grid-cols-[1fr_1fr_auto] items-center gap-2';
     row.innerHTML = `
-      <input type="time" data-i="${i}" data-field="headblock-start" value="${b.start}">
-      <input type="time" data-i="${i}" data-field="headblock-end" value="${b.end}">
-      <button class="btn-del" data-delheadblock="${i}" style="padding:8px 10px">×</button>
+      <input type="time" data-i="${i}" data-field="headblock-start" value="${b.start}" class="h-10 sm:h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/80 px-3 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+      <input type="time" data-i="${i}" data-field="headblock-end" value="${b.end}" class="h-10 sm:h-11 w-full rounded-xl border border-slate-700/80 bg-slate-950/80 px-3 text-sm font-medium text-slate-100 tabular-nums focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+      <button class="btn-del h-10 w-10 sm:h-11 sm:w-11 shrink-0 inline-flex items-center justify-center rounded-xl border border-rose-500/25 bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white text-lg font-medium leading-none transition cursor-pointer" data-delheadblock="${i}">×</button>
     `;
     headBlocksDiv.appendChild(row);
   });
@@ -974,8 +974,8 @@ function plan(opts){
   const dupes = checkDuplicateTaskNames();
   if (dupes.length > 0) {
     renderDupeWarning();
-    resultsDiv.innerHTML = `<div class="warning"><strong>⛔ Plan Oluşturulamadı: Mükerrer İş İsmi Var</strong><br>
-      <div class="small" style="color:var(--danger);margin-top:6px">İşler listesinde birden fazla aynı isim kullanılmış. Önce isimleri benzersiz hale getirin.</div></div>`;
+    resultsDiv.innerHTML = `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm text-rose-200 space-y-1.5"><strong class="font-semibold text-rose-300">⛔ Plan Oluşturulamadı: Mükerrer İş İsmi Var</strong>
+      <div class="small text-xs text-rose-300/90">İşler listesinde birden fazla aynı isim kullanılmış. Önce isimleri benzersiz hale getirin.</div></div>`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
   }
@@ -1006,25 +1006,25 @@ function plan(opts){
   const repeatedTechNames = [...techNameCounts.entries()].filter(([, count]) => count > 1).map(([name]) => name);
   if (repeatedTechNames.length) inputErrors.push(`Teknisyen adları benzersiz olmalı: ${repeatedTechNames.join(', ')}.`);
   if (inputErrors.length) {
-    resultsDiv.innerHTML = `<div class="warning"><strong>⛔ Plan oluşturulamadı: girişleri düzeltin</strong>${inputErrors.map(message => `<div class="small">• ${escHtml(message)}</div>`).join('')}</div>`;
+    resultsDiv.innerHTML = `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm text-rose-200 space-y-1.5"><strong class="font-semibold text-rose-300">⛔ Plan oluşturulamadı: girişleri düzeltin</strong>${inputErrors.map(message => `<div class="small text-xs text-rose-200/90">• ${escHtml(message)}</div>`).join('')}</div>`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
   }
 
-  if(!$('shiftStart').value || !$('shiftEnd').value){ resultsDiv.innerHTML = `<div class="warning">Vardiya başlangıç/bitiş saatlerini girin.</div>`; $('shiftDetails').open = true; return; }
+  if(!$('shiftStart').value || !$('shiftEnd').value){ resultsDiv.innerHTML = `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm font-medium text-rose-200">Vardiya başlangıç/bitiş saatlerini girin.</div>`; $('shiftDetails').open = true; return; }
 
   if (planMode === 'group') {
     normalizeTechRoles();
     const supervisors = techRoles.filter(r => r === 'supervisor').length;
     if (supervisors === 0) {
-      resultsDiv.innerHTML = `<div class="warning">Supervisor Grup modunda en az 1 kişinin rolü <strong>Supervisor</strong> olmalı.</div>`;
+      resultsDiv.innerHTML = `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm text-rose-200">Supervisor Grup modunda en az 1 kişinin rolü <strong class="font-semibold text-white">Supervisor</strong> olmalı.</div>`;
       return;
     }
   }
 
   _shiftS_real = t2m($('shiftStart').value);
   const shiftE_real = t2m($('shiftEnd').value);
-  if(shiftE_real <= _shiftS_real){ resultsDiv.innerHTML = `<div class="warning">Vardiya bitiş saati başlangıçtan sonra olmalı.</div>`; return; }
+  if(shiftE_real <= _shiftS_real){ resultsDiv.innerHTML = `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm font-medium text-rose-200">Vardiya bitiş saati başlangıçtan sonra olmalı.</div>`; return; }
 
   _breaks = [];
   const breakErrors = [];
@@ -1056,13 +1056,13 @@ function plan(opts){
     }
   }
   if (breakErrors.length) {
-    resultsDiv.innerHTML = `<div class="warning"><strong>⛔ Mola saatleri geçersiz</strong>${breakErrors.map(message => `<div class="small">• ${escHtml(message)}</div>`).join('')}</div>`;
+    resultsDiv.innerHTML = `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm text-rose-200 space-y-1.5"><strong class="font-semibold text-rose-300">⛔ Mola saatleri geçersiz</strong>${breakErrors.map(message => `<div class="small text-xs text-rose-200/90">• ${escHtml(message)}</div>`).join('')}</div>`;
     $('shiftDetails').open = true;
     return;
   }
   _totalBreakLen = _breaks.reduce((sum, b) => sum + b.len, 0);
   _workEnd_offset = (shiftE_real - _shiftS_real) - _totalBreakLen;
-  if(_workEnd_offset <= 0) { resultsDiv.innerHTML = `<div class="warning">Vardiya çok kısa / mola çok uzun - plan yapılamıyor.</div>`; return; }
+  if(_workEnd_offset <= 0) { resultsDiv.innerHTML = `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm font-medium text-rose-200">Vardiya çok kısa / mola çok uzun - plan yapılamıyor.</div>`; return; }
 
   const HEAD_MIN = 15;
   const isGroup = (planMode === 'group');
@@ -2808,25 +2808,27 @@ function plan(opts){
     return manual ? { picked: manual, auto: false, recommended } : { picked: recommended, auto: true, recommended };
   }
 
+  const chevronSvg = '<svg class="h-4 w-4 shrink-0 text-sky-400 transition-transform duration-200 group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>';
   const crewNames = crews => crews.map(c => c.map(i => technicians[i]).join(' + ')).join('  |  ');
   function scenarioBarHtml(view){
     const { list, picked, auto, recommended } = view;
     if (list.length < 2) {
-      return `<div class="card scn-card"><div class="small">🧩 Ekip düzeni: <strong>${escHtml(crewNames(picked.spec.crews))}</strong> <span style="color:var(--muted)">(bu girdilerle tek uygun dağıtım var)</span></div></div>`;
+      return `<div class="card scn-card rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl px-4 py-3.5 sm:px-6 shadow-lg shadow-black/20"><div class="small text-xs sm:text-sm text-slate-300 leading-relaxed">🧩 Ekip düzeni: <strong class="font-semibold text-white">${escHtml(crewNames(picked.spec.crews))}</strong> <span class="text-slate-400">(bu girdilerle tek uygun dağıtım var)</span></div></div>`;
     }
     const chips = list.map((r, i) => {
       const m = r.metrics;
-      const badge = r === recommended ? '<span class="scn-badge">★ Önerilen</span>' : '';
-      return `<button type="button" class="scn-chip${r === picked ? ' active' : ''}" onclick="selectScenario('${escHtml(r.spec.key)}')" title="${escHtml(crewNames(r.spec.crews))}">
-        <span class="scn-title">Senaryo ${i + 1} · ${r.spec.crews.length === 1 ? 'Tek ekip' : r.spec.crews.length + ' ekip'} ${badge}</span>
-        <span class="scn-crews">${escHtml(crewNames(r.spec.crews))}</span>
-        <span class="scn-meta">Ekip içi aynılık %${Math.round(m.crewShare * 100)} · ${m.pieces} parça (kişi başı ${(m.active ? m.pieces / m.active : 0).toFixed(1).replace('.', ',')}) · B1 düzeni %${Math.round(m.regularity * 100)}${m.missing ? ` · <span style="color:var(--warning)">${(m.missing / 60).toFixed(2)} sa atanamadı</span>` : ''}</span>
+      const badge = r === recommended ? '<span class="scn-badge inline-flex items-center rounded-full bg-emerald-500/20 border border-emerald-500/35 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">★ Önerilen</span>' : '';
+      return `<button type="button" class="scn-chip${r === picked ? ' active' : ''} flex flex-col items-start gap-1.5 w-full text-left rounded-xl border border-slate-700/80 bg-slate-950/60 p-3.5 sm:p-4 transition-all hover:border-sky-500/60 [&.active]:border-sky-500 [&.active]:bg-sky-500/10 [&.active]:ring-1 [&.active]:ring-sky-500/50 cursor-pointer" onclick="selectScenario('${escHtml(r.spec.key)}')" title="${escHtml(crewNames(r.spec.crews))}">
+        <span class="scn-title font-display text-sm font-semibold text-white flex items-center gap-2 flex-wrap">Senaryo ${i + 1} · ${r.spec.crews.length === 1 ? 'Tek ekip' : r.spec.crews.length + ' ekip'} ${badge}</span>
+        <span class="scn-crews text-xs sm:text-sm text-slate-300 break-words leading-snug">${escHtml(crewNames(r.spec.crews))}</span>
+        <span class="scn-meta text-[11px] sm:text-xs text-slate-400 tabular-nums">Ekip içi aynılık %${Math.round(m.crewShare * 100)} · ${m.pieces} parça (kişi başı ${(m.active ? m.pieces / m.active : 0).toFixed(1).replace('.', ',')}) · B1 düzeni %${Math.round(m.regularity * 100)}${m.missing ? ` · <span class="text-amber-400 font-medium">${(m.missing / 60).toFixed(2)} sa atanamadı</span>` : ''}</span>
       </button>`;
     }).join('');
-    return `<div class="card scn-card"><h2>🎛️ Dağıtım Senaryoları</h2>
-      <div class="small" style="color:var(--muted);margin-bottom:8px">Adam saat dağıtımı birden fazla ekip düzeniyle yapılabiliyor. Her teknisyen bir senaryoda tek bir ekipte yer alır ve ekipteki herkes aynı işi aynı saat aralığında yapar; ekip büyüklükleri işlerin süresine göre farklılaşır. ${auto ? 'Hassasiyet çubuğuna göre <strong>önerilen senaryo otomatik seçildi</strong>; isterseniz aşağıdan kendiniz seçebilirsiniz.' : 'Senaryoyu <strong>siz seçtiniz</strong>.'}</div>
-      <div class="scn-list">${chips}</div>
-      ${auto ? '' : `<button type="button" class="btn scn-auto" onclick="selectScenario('')">↺ Otomatik (önerilen) seçime dön</button>`}
+    return `<div class="card scn-card rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl p-4 sm:p-6 shadow-xl shadow-black/25">
+      <h2 class="font-display text-base sm:text-lg font-semibold text-sky-400 flex items-center gap-2 mb-2">🎛️ Dağıtım Senaryoları</h2>
+      <div class="small text-xs sm:text-sm text-slate-400 leading-relaxed mb-3.5 [&_strong]:font-semibold [&_strong]:text-slate-200">Adam saat dağıtımı birden fazla ekip düzeniyle yapılabiliyor. Her teknisyen bir senaryoda tek bir ekipte yer alır ve ekipteki herkes aynı işi aynı saat aralığında yapar; ekip büyüklükleri işlerin süresine göre farklılaşır. ${auto ? 'Hassasiyet çubuğuna göre <strong>önerilen senaryo otomatik seçildi</strong>; isterseniz aşağıdan kendiniz seçebilirsiniz.' : 'Senaryoyu <strong>siz seçtiniz</strong>.'}</div>
+      <div class="scn-list grid grid-cols-1 md:grid-cols-2 gap-2.5">${chips}</div>
+      ${auto ? '' : `<button type="button" class="btn scn-auto mt-3.5 h-10 inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700/80 bg-slate-800/70 px-4 font-display text-xs sm:text-sm font-medium text-slate-200 hover:bg-slate-700 hover:text-white transition cursor-pointer" onclick="selectScenario('')">↺ Otomatik (önerilen) seçime dön</button>`}
     </div>`;
   }
 
@@ -2864,28 +2866,57 @@ function plan(opts){
     let html = '';
     const totalInputHours = tasks.reduce((s,t)=>s + (parseFloat(t.hours)||0),0);
     const crewText = R.spec.crews.length === 1 ? 'Tek ekip' : `${R.spec.crews.length} ekip`;
-    html += `<div class="card"><div class="small">Mod: <strong>${isGroup ? 'Supervisor Grup' : 'Supervisor ALL'}</strong> – Hassasiyet: <strong>${sensitivityText()}</strong> – Ekip düzeni: <strong>${crewText}</strong> – Toplam İş: <strong>${tasks.length}</strong> – Girdi Toplam Süre: <strong>${totalInputHours.toFixed(2)} saat</strong></div></div>`;
+    html += `<div class="card rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl px-4 py-3.5 sm:px-6 shadow-lg shadow-black/20">
+      <div class="small flex flex-wrap items-center gap-x-4 gap-y-2 text-xs sm:text-sm text-slate-400 tabular-nums">
+        <span>Mod: <strong class="font-semibold text-white">${isGroup ? 'Supervisor Grup' : 'Supervisor ALL'}</strong></span>
+        <span class="hidden sm:inline text-slate-700">•</span>
+        <span>Hassasiyet: <strong class="font-semibold text-sky-300">${sensitivityText()}</strong></span>
+        <span class="hidden sm:inline text-slate-700">•</span>
+        <span>Ekip düzeni: <strong class="font-semibold text-white">${crewText}</strong></span>
+        <span class="hidden sm:inline text-slate-700">•</span>
+        <span>Toplam İş: <strong class="font-semibold text-white">${tasks.length}</strong></span>
+        <span class="hidden sm:inline text-slate-700">•</span>
+        <span>Girdi Toplam Süre: <strong class="font-semibold text-emerald-300">${totalInputHours.toFixed(2)} saat</strong></span>
+      </div>
+    </div>`;
     html += scenarioBarHtml(view);
 
     // Capacity table
+    const roleBadgeCls = r => r === 'supervisor'
+      ? 'border-sky-500/30 bg-sky-500/15 text-sky-300'
+      : r === 'qualified'
+        ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+        : 'border-slate-700 bg-slate-800/80 text-slate-300';
     const busyRows = technicians.map((name, i) => {
+      const rKey = techRoles[i] || 'regular';
       const busyH = minutesToHoursStr(techBusyMinutes[i] || 0);
       const freeH = minutesToHoursStr(techFreeCapacities[i] || 0);
-      const role = isGroup ? `<span class="role-tag ${techRoles[i] || 'regular'}">${techRoles[i] === 'supervisor' ? 'Supervisor' : techRoles[i] === 'qualified' ? 'Kalifiyeli' : 'Teknisyen'}</span>` : '';
+      const role = isGroup ? `<span class="role-tag ${rKey} inline-flex items-center self-start sm:self-auto rounded-md border px-2 py-0.5 text-[11px] font-semibold ${roleBadgeCls(rKey)}">${rKey === 'supervisor' ? 'Supervisor' : rKey === 'qualified' ? 'Kalifiyeli' : 'Teknisyen'}</span>` : '';
       const preH = minutesToHoursStr(techPreAssignMinutes[i] || 0);
-      return `<tr><td><strong>${escHtml(name)}</strong>${role}</td><td>${busyH}</td><td>${preH}</td><td>${freeH}</td></tr>`;
+      return `<tr class="hover:bg-slate-800/30 transition-colors"><td class="px-2.5 sm:px-3.5 py-2.5 font-medium text-white"><div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2"><strong>${escHtml(name)}</strong>${role}</div></td><td class="px-2.5 sm:px-3.5 py-2.5 text-slate-300 tabular-nums whitespace-nowrap">${busyH}</td><td class="px-2.5 sm:px-3.5 py-2.5 text-slate-300 tabular-nums whitespace-nowrap">${preH}</td><td class="px-2.5 sm:px-3.5 py-2.5 font-semibold text-sky-300 tabular-nums whitespace-nowrap">${freeH}</td></tr>`;
     }).join('');
-    html += `<details class="collapsible" open><summary>⏱️ Teknisyen Net Kapasite Kontrolü</summary><div class="body">
-      <div class="small" style="color:var(--muted);margin-bottom:8px">Dolu saatler iş ataması için kapalıdır ve toplam yüke eklenmez.</div>
-      <table class="table"><tr><th>Teknisyen</th><th>Dolu Blok</th><th>Manuel İş</th><th>Otomatik Atamaya Kalan</th></tr>${busyRows}</table>
-    </div></details>`;
+    html += `<details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-lg shadow-black/20 overflow-hidden" open>
+      <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+        <span class="font-display text-sm sm:text-base font-semibold text-slate-100 flex items-center gap-2">⏱️ Teknisyen Net Kapasite Kontrolü</span>
+        ${chevronSvg}
+      </summary>
+      <div class="body border-t border-slate-800/80 px-4 py-4 sm:px-6 sm:py-5">
+        <div class="small text-xs sm:text-sm text-slate-400 mb-3">Dolu saatler iş ataması için kapalıdır ve toplam yüke eklenmez.</div>
+        <div class="overflow-x-auto rounded-xl border border-slate-800/80 bg-slate-950/50">
+          <table class="table min-w-full divide-y divide-slate-800/80 text-xs sm:text-sm">
+            <thead class="bg-slate-900/90"><tr><th class="px-2.5 sm:px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Teknisyen</th><th class="px-2.5 sm:px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Dolu Blok</th><th class="px-2.5 sm:px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Manuel İş</th><th class="px-2.5 sm:px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Otomatik Atamaya Kalan</th></tr></thead>
+            <tbody class="divide-y divide-slate-800/60">${busyRows}</tbody>
+          </table>
+        </div>
+      </div>
+    </details>`;
 
     if (preAssignWarnings.length > 0) {
-      html += `<div class="warning"><strong>📌 Uygulanamayan Manuel Atamalar</strong><br>${preAssignWarnings.map(w => `<div class="small">• ${w}</div>`).join('')}</div>`;
+      html += `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm text-rose-200 space-y-1.5"><strong class="font-semibold text-rose-300">📌 Uygulanamayan Manuel Atamalar</strong>${preAssignWarnings.map(w => `<div class="small text-xs text-rose-200/90">• ${w}</div>`).join('')}</div>`;
     }
 
     if (manualOverAssignmentWarnings.length > 0) {
-      html += `<div class="attention"><strong>📌 Manuel atama işçilik hedefini aşıyor</strong>${manualOverAssignmentWarnings.map(w => `<div class="small">• ${w}</div>`).join('')}</div>`;
+      html += `<div class="attention rounded-2xl border border-amber-500/30 border-l-4 border-l-amber-500 bg-amber-500/10 p-4 text-sm text-amber-200 space-y-1.5"><strong class="font-semibold text-amber-300">📌 Manuel atama işçilik hedefini aşıyor</strong>${manualOverAssignmentWarnings.map(w => `<div class="small text-xs text-amber-200/90">• ${w}</div>`).join('')}</div>`;
     }
 
     // Kapasite yetmiyorsa süreleri değiştirmek yerine açık kapasite açığını göster.
@@ -2893,23 +2924,37 @@ function plan(opts){
       const capHours = (totalCapacityMin / 60).toFixed(2);
       const needHours = (mandatoryAfterRound / 60).toFixed(2);
       const deficitHours = ((mandatoryAfterRound - totalCapacityMin) / 60).toFixed(2);
-      let detailHtml = '<table class="table" style="margin-top:10px"><tr><th>İş</th><th>Planlama işçilik talebi</th><th>Manuel atama</th></tr>';
+      let detailHtml = '<div class="mt-3 overflow-x-auto rounded-xl border border-amber-500/25 bg-slate-950/60"><table class="table min-w-full divide-y divide-slate-800/80 text-xs sm:text-sm"><thead class="bg-slate-900/90"><tr><th class="px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">İş</th><th class="px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Planlama işçilik talebi</th><th class="px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Manuel atama</th></tr></thead><tbody class="divide-y divide-slate-800/60">';
       tasksCopy.filter(t => !t.isOpen && t.techWorkMinOriginal > 0).forEach(task => {
-        detailHtml += `<tr><td><strong>${escHtml(task.name)}</strong></td><td>${(task.techWorkMin / 60).toFixed(2)} saat</td><td>${((task.preAssignedMin || 0) / 60).toFixed(2)} saat</td></tr>`;
+        detailHtml += `<tr><td class="px-3.5 py-2.5 font-medium text-white"><strong>${escHtml(task.name)}</strong></td><td class="px-3.5 py-2.5 text-slate-300 tabular-nums">${(task.techWorkMin / 60).toFixed(2)} saat</td><td class="px-3.5 py-2.5 text-slate-300 tabular-nums">${((task.preAssignedMin || 0) / 60).toFixed(2)} saat</td></tr>`;
       });
-      detailHtml += '</table>';
-      html += `<details class="collapsible" open><summary>⚠️ Kapasite Aşımı – İş süreleri korundu</summary><div class="body attention">
-        <strong>Zorunlu işlerin toplam işçilik talebi mevcut teknisyen kapasitesini aşıyor.</strong><br>
-        <span class="small" style="color:var(--muted)">Kullanılabilir kapasite: <strong>${capHours} saat</strong><br>
-        Planlanan zorunlu işçilik talebi: <strong>${needHours} saat</strong><br>
-        Kapasite açığı: <strong>${deficitHours} saat</strong><br>
-        İşlerin süreleri otomatik olarak küçültülmedi. Atanamayan süreler sonuç uyarılarında gösterilir; planı uygulamadan önce kapasite/iş listesi yeniden düzenlenmelidir.</span>${detailHtml}
-      </div></details>`;
+      detailHtml += '</tbody></table></div>';
+      html += `<details class="collapsible group rounded-2xl border border-amber-500/35 bg-slate-900/75 backdrop-blur-xl shadow-lg shadow-black/20 overflow-hidden" open>
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+          <span class="font-display text-sm sm:text-base font-semibold text-amber-300 flex items-center gap-2">⚠️ Kapasite Aşımı – İş süreleri korundu</span>
+          ${chevronSvg}
+        </summary>
+        <div class="body attention border-t border-amber-500/25 bg-amber-500/5 px-4 py-4 sm:px-6 sm:py-5 text-sm text-amber-200 space-y-2">
+          <strong class="block font-semibold text-amber-300">Zorunlu işlerin toplam işçilik talebi mevcut teknisyen kapasitesini aşıyor.</strong>
+          <div class="small text-xs sm:text-sm text-slate-300 leading-relaxed space-y-1 tabular-nums">
+            <div>Kullanılabilir kapasite: <strong class="font-semibold text-white">${capHours} saat</strong></div>
+            <div>Planlanan zorunlu işçilik talebi: <strong class="font-semibold text-white">${needHours} saat</strong></div>
+            <div>Kapasite açığı: <strong class="font-semibold text-rose-400">${deficitHours} saat</strong></div>
+            <div class="text-slate-400 pt-1">İşlerin süreleri otomatik olarak küçültülmedi. Atanamayan süreler sonuç uyarılarında gösterilir; planı uygulamadan önce kapasite/iş listesi yeniden düzenlenmelidir.</div>
+          </div>${detailHtml}
+        </div>
+      </details>`;
     }
 
     if (roundingAdjustments.length > 0) {
-      const rows = roundingAdjustments.map(a => `<div class="small">• ${escHtml(a.name)}: ${(a.before / 60).toFixed(2)} → ${(a.after / 60).toFixed(2)} saat (${a.diff > 0 ? '+' : ''}${a.diff} dk, 15 dk yukarı yuvarlama)</div>`).join('');
-      html += `<details class="collapsible"><summary>ℹ️ 15 dk yukarı yuvarlama düzeltmeleri (${roundingAdjustments.length})</summary><div class="body">${rows}</div></details>`;
+      const rows = roundingAdjustments.map(a => `<div class="small text-xs sm:text-sm text-slate-300 tabular-nums">• ${escHtml(a.name)}: ${(a.before / 60).toFixed(2)} → ${(a.after / 60).toFixed(2)} saat (${a.diff > 0 ? '+' : ''}${a.diff} dk, 15 dk yukarı yuvarlama)</div>`).join('');
+      html += `<details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-lg shadow-black/20 overflow-hidden">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+          <span class="font-display text-sm sm:text-base font-semibold text-slate-100">ℹ️ 15 dk yukarı yuvarlama düzeltmeleri (${roundingAdjustments.length})</span>
+          ${chevronSvg}
+        </summary>
+        <div class="body border-t border-slate-800/80 px-4 py-4 sm:px-6 sm:py-5 space-y-1.5">${rows}</div>
+      </details>`;
     }
 
     // Tek iş kartı: eşit paylaşım özeti ve eşitliği bozan (çakışan) koşullar.
@@ -2937,11 +2982,14 @@ function plan(opts){
       else changed.forEach(i => conflicts.push(`${techObjs[i].name}: denetim / B1 kontrolü sonrası payı ${h(es.planned[i])} → ${h(finalMin[i])} sa oldu.`));
 
       // Eşitlik sağlandıysa herkesin payı, sağlanamadıysa ulaşılamayan eşit pay hedefi gösterilir.
-      const shareLabel = conflicts.length ? `eşit pay hedefi: <strong>${h(es.target)} sa</strong>` : `kişi başı pay: <strong>${h(level)} sa</strong>`;
+      const shareLabel = conflicts.length ? `eşit pay hedefi: <strong class="font-semibold text-white">${h(es.target)} sa</strong>` : `kişi başı pay: <strong class="font-semibold text-white">${h(level)} sa</strong>`;
       equalShareSummary = { is_no: es.task.name, [conflicts.length ? 'esit_pay_hedefi' : 'kisi_basi_pay']: h(conflicts.length ? es.target : level) + ' sa', notlar: conflicts.concat(infos) };
-      html += `<div class="${conflicts.length ? 'attention' : 'capacity-info'}"><strong>⚖️ Tek İş Kartı – Eşit Paylaşım${conflicts.length ? ': Çakışan Koşullar' : ''}</strong>
-        <div class="small" style="margin:6px 0"><strong>${escHtml(es.task.name)}</strong> işi ${techObjs.length} personele paylaştırıldı – ${shareLabel}</div>
-        ${conflicts.concat(infos).map(x => `<div class="small">• ${escHtml(x)}</div>`).join('')}</div>`;
+      const eqCls = conflicts.length
+        ? 'attention border-amber-500/30 border-l-amber-500 bg-amber-500/10 text-amber-200'
+        : 'capacity-info border-sky-500/30 border-l-sky-500 bg-sky-500/10 text-sky-200';
+      html += `<div class="rounded-2xl border border-l-4 p-4 text-sm space-y-1.5 ${eqCls}"><strong class="font-semibold text-white">⚖️ Tek İş Kartı – Eşit Paylaşım${conflicts.length ? ': Çakışan Koşullar' : ''}</strong>
+        <div class="small text-xs sm:text-sm"><strong class="font-semibold text-white">${escHtml(es.task.name)}</strong> işi ${techObjs.length} personele paylaştırıldı – ${shareLabel}</div>
+        ${conflicts.concat(infos).map(x => `<div class="small text-xs opacity-90">• ${escHtml(x)}</div>`).join('')}</div>`;
     }
 
     // ==========================================================
@@ -2949,11 +2997,16 @@ function plan(opts){
     // Teknisyen ismi + Toplam (saat) başlık olarak; içeride
     // İşler ve zaman aralıkları tek satırda 2 sütun.
     // ==========================================================
-    let techHtml = `<details class="collapsible" id="techProgram" open><summary>👷 Teknisyenlerin Programı</summary><div class="body">
-      <div style="margin:10px 0 14px 0">
-        <label class="small" style="display:block;margin-bottom:6px;color:var(--muted)">Opsiyonel Not</label>
-        <textarea data-field="program-note" placeholder="Planla ilgili not ekle...">${escHtml(programNote)}</textarea>
-      </div>`;
+    let techHtml = `<details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-xl shadow-black/25 overflow-hidden" id="techProgram" open>
+      <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+        <span class="font-display text-base sm:text-lg font-semibold text-sky-400 flex items-center gap-2">👷 Teknisyenlerin Programı</span>
+        ${chevronSvg}
+      </summary>
+      <div class="body border-t border-slate-800/80 px-4 py-4 sm:px-6 sm:py-5 space-y-4">
+        <div>
+          <label class="small block text-xs font-medium text-slate-400 mb-1.5">Opsiyonel Not</label>
+          <textarea data-field="program-note" placeholder="Planla ilgili not ekle..." class="w-full min-h-[84px] rounded-xl border border-slate-700/80 bg-slate-950/75 px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition resize-y">${escHtml(programNote)}</textarea>
+        </div>`;
 
     const roleLabel = r => r === 'supervisor' ? 'Supervisor' : r === 'qualified' ? 'Kalifiyeli' : 'Teknisyen';
     const roleEmoji = r => r === 'supervisor' ? '👷🏼‍♂️' : r === 'qualified' ? '🧑‍🔬' : '👨‍🔧';
@@ -2964,7 +3017,7 @@ function plan(opts){
     perTech.forEach((p, idx)=>{
       p.segs.sort((a,b)=>a.start - b.start);
 
-      let gapCell = '—';
+      let gapCell = '<span class="text-slate-500">—</span>';
       // p.total manuel atamaları da içerir; dolu bloklar sonrası kapasiteden toplam atanmış işi çıkar.
       const freeCap = Math.max(0, _workEnd_offset - (techBusyMinutes[idx] || 0));
       const remainingFree = Math.max(0, freeCap - p.total);
@@ -2976,10 +3029,10 @@ function plan(opts){
             if (we - ws >= 15) gaps.push(`${m2t(workToReal(ws, 'start'))} - ${m2t(workToReal(we, 'end'))}`);
           }
         }
-        gapCell = `<span style="color:var(--warning)">⚠ ${minutesToHoursStr(remainingFree)} sa${gaps.length ? `<br><span style="font-family:monospace;font-size:0.9em">${gaps.join(', ')}</span>` : ''}</span>`;
+        gapCell = `<span class="text-amber-400 font-medium">⚠ ${minutesToHoursStr(remainingFree)} sa${gaps.length ? `<br><span class="font-mono text-[11px] sm:text-xs text-amber-300/85">${gaps.join(', ')}</span>` : ''}</span>`;
       }
-      const totalCell = p.segs.length ? `${minutesToHoursStr(p.total)} sa` : `<span style="color:var(--warning)">⚠ Atanmış iş yok</span>`;
-      summaryRows += `<tr><td><strong>${nameWithRole(idx)}</strong></td><td>${totalCell}</td><td>${gapCell}</td></tr>`;
+      const totalCell = p.segs.length ? `<span class="font-medium text-slate-200">${minutesToHoursStr(p.total)} sa</span>` : `<span class="text-amber-400 font-medium">⚠ Atanmış iş yok</span>`;
+      summaryRows += `<tr class="hover:bg-slate-800/30 transition-colors"><td class="px-3.5 py-2.5 font-medium text-white whitespace-nowrap"><strong>${nameWithRole(idx)}</strong></td><td class="px-3.5 py-2.5 tabular-nums whitespace-nowrap">${totalCell}</td><td class="px-3.5 py-2.5 tabular-nums">${gapCell}</td></tr>`;
     });
 
     // Her teknisyen tek bir ekipte (grupta) listelenir: kart = ekip. Ekibin aynı işi aynı saatte yapan üyeleri tek satırda
@@ -3002,8 +3055,8 @@ function plan(opts){
 
     const waIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>';
     if (crewCards.length) {
-      techHtml += `<div style="display:flex;justify-content:flex-end;margin-bottom:14px">
-        <button class="btn-wa-copy btn-wa-all" onclick="copyWAAll()">${waIcon} <span>Tümünü WhatsApp'a Kopyala</span></button>
+      techHtml += `<div class="flex justify-end">
+        <button class="btn-wa-copy btn-wa-all inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-lg shadow-emerald-600/25 transition-all cursor-pointer [&_svg]:h-4 [&_svg]:w-4 [&_svg]:fill-current [&_svg]:shrink-0" onclick="copyWAAll()">${waIcon} <span>Tümünü WhatsApp'a Kopyala</span></button>
       </div>`;
     }
 
@@ -3016,29 +3069,35 @@ function plan(opts){
       const totals = c.active.map(i => perTech[i].total);
       const sameTotals = totals.every(v => v === totals[0]);
 
-      const body = '<div class="program-table">' + c.segs.map(s => {
+      const body = '<div class="program-table space-y-2">' + c.segs.map(s => {
         const subset = s.members.length < c.active.length;
-        let line = `<div class="program-seg">
-          <span class="program-task">${s.locked ? '<span title="Manuel atama">📌 </span>' : ''}${escHtml(s.task)}</span>
-          <span class="program-time">${m2t(s.start)} - ${m2t(s.end)}</span>
-        </div>`;
-        if (subset) line += `<div class="small program-meta-line" style="color:var(--muted)">👥 ${s.members.map(i => escHtml(perTech[i].name)).join(', ')}</div>`;
+        let meta = '';
+        if (subset) meta += `<div class="small program-meta-line text-xs text-slate-400">👥 ${s.members.map(i => escHtml(perTech[i].name)).join(', ')}</div>`;
         const hasRegular = isGroup && s.members.some(i => perTech[i].role === 'regular');
         const supMembers = isGroup ? s.members.filter(i => perTech[i].role === 'supervisor') : [];
         if (hasRegular && supMembers.length) {
           // Aynı işte aynı saatte çalışan Supervisor denetler.
-          line += `<div class="small program-meta-line" style="color:var(--accent)">↳ Denetim: ${supMembers.map(i => escHtml(perTech[i].name)).join(', ')} (${m2t(s.start)}-${m2t(s.end)})</div>`;
+          meta += `<div class="small program-meta-line text-xs text-sky-400">↳ Denetim: ${supMembers.map(i => escHtml(perTech[i].name)).join(', ')} (${m2t(s.start)}-${m2t(s.end)})</div>`;
         } else if (hasRegular) {
           const attr = attributeSupervision(s._ws, s._we, techObjs, techRoles, technicians, s.taskId);
           if (attr.covered.length > 0) {
             const supList = attr.covered.map(cv => `${escHtml(cv.supName)} (${m2t(workToReal(cv.start, 'start'))}-${m2t(workToReal(cv.end, 'end'))})`).join(', ');
-            line += `<div class="small program-meta-line" style="color:var(--accent)">↳ Denetim: ${supList}</div>`;
+            meta += `<div class="small program-meta-line text-xs text-sky-400">↳ Denetim: ${supList}</div>`;
           }
           if (!attr.fullyCovered) {
-            line += `<div class="small program-meta-line" style="color:var(--danger)">⚠ Denetimsiz: ${m2t(workToReal(attr.uncoveredFrom, 'start'))}-${m2t(workToReal(s._we, 'end'))}</div>`;
+            meta += `<div class="small program-meta-line text-xs text-rose-400 font-medium">⚠ Denetimsiz: ${m2t(workToReal(attr.uncoveredFrom, 'start'))}-${m2t(workToReal(s._we, 'end'))}</div>`;
           }
         }
-        return line;
+        return `<div class="rounded-xl border border-slate-800/80 bg-slate-900/70 px-3.5 py-2.5 space-y-1.5">
+          <div class="program-seg flex items-center justify-between gap-3">
+            <span class="program-task flex items-center gap-2.5 text-sm font-medium text-slate-100 min-w-0">
+              <span class="h-2 w-2 rounded-full bg-sky-400 shrink-0"></span>
+              <span class="break-words">${s.locked ? '<span title="Manuel atama">📌 </span>' : ''}${escHtml(s.task)}</span>
+            </span>
+            <span class="program-time shrink-0 whitespace-nowrap rounded-lg border border-slate-700/80 bg-slate-950 px-2.5 py-1 font-mono text-xs sm:text-sm font-medium text-sky-300 tabular-nums">${m2t(s.start)} - ${m2t(s.end)}</span>
+          </div>
+          ${meta ? `<div class="pl-[18px] space-y-0.5 border-t border-slate-800/60 pt-1.5">${meta}</div>` : ''}
+        </div>`;
       }).join('') + '</div>';
 
       window._waCopyData[idx] = {
@@ -3048,22 +3107,29 @@ function plan(opts){
           who: s.members.length < c.active.length ? s.members.map(i => perTech[i].name).join(', ') : '' }))
       };
 
-      techHtml += `<div class="tech-program-block">
-        <div class="tech-program-header">
-          <div class="tech-program-header-left">
-            <span class="tech-program-name"><span>${c.active.length > 1 ? '👥' : '👤'} ${c.active.map(nameWithRole).join(' + ')}</span></span>
+      techHtml += `<div class="tech-program-block rounded-2xl border border-slate-800/90 border-l-4 border-l-sky-500 bg-slate-950/60 p-4 sm:p-5 shadow-md space-y-3">
+        <div class="tech-program-header flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-800/80">
+          <div class="tech-program-header-left flex items-center gap-2 min-w-0">
+            <span class="tech-program-name font-display text-base sm:text-lg font-bold text-white leading-snug"><span>${c.active.length > 1 ? '👥' : '👤'} ${c.active.map(nameWithRole).join(' + ')}</span></span>
           </div>
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-            <span class="tech-program-total">${sameTotals ? 'Toplam' : 'Ekip süresi'}: <strong>${minutesToHoursStr(sameTotals ? totals[0] : crewTime)} sa</strong></span>
-            <button class="btn-wa-copy" onclick="copyWA(${idx})">${waIcon} <span>WhatsApp</span></button>
+          <div class="flex items-center gap-2.5 shrink-0">
+            <span class="tech-program-total inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/15 px-3 py-1 text-xs sm:text-sm font-semibold text-sky-300 tabular-nums">${sameTotals ? 'Toplam' : 'Ekip süresi'}: <strong class="text-white">${minutesToHoursStr(sameTotals ? totals[0] : crewTime)} sa</strong></span>
+            <button class="btn-wa-copy h-8 w-8 sm:h-auto sm:w-auto sm:px-3.5 sm:py-1.5 inline-flex items-center justify-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white shadow-md shadow-emerald-600/20 transition cursor-pointer [&_svg]:h-4 [&_svg]:w-4 [&_svg]:fill-current [&_svg]:shrink-0" onclick="copyWA(${idx})" title="WhatsApp için Kopyala">${waIcon} <span class="hidden sm:inline">WhatsApp</span></button>
           </div>
         </div>
-        ${sameTotals ? '' : `<div class="small program-meta-line" style="color:var(--muted);margin:0 0 6px 0">${c.active.map(i => `${escHtml(perTech[i].name)}: ${minutesToHoursStr(perTech[i].total)} sa`).join(' · ')}</div>`}
+        ${sameTotals ? '' : `<div class="small program-meta-line text-xs text-slate-400 tabular-nums">${c.active.map(i => `${escHtml(perTech[i].name)}: ${minutesToHoursStr(perTech[i].total)} sa`).join(' · ')}</div>`}
         ${body}
       </div>`;
     });
-    techHtml += `<div class="small" style="color:var(--muted);margin-top:4px">Kişi bazında toplam ve boşluklar</div>
-      <table class="table" style="margin-top:8px"><tr><th>Teknisyen</th><th>Toplam</th><th>Boşluk</th></tr>${summaryRows}</table>`;
+    techHtml += `<div class="pt-2">
+      <div class="small text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Kişi bazında toplam ve boşluklar</div>
+      <div class="overflow-x-auto rounded-xl border border-slate-800/80 bg-slate-950/50">
+        <table class="table min-w-full divide-y divide-slate-800/80 text-xs sm:text-sm">
+          <thead class="bg-slate-900/90"><tr><th class="px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Teknisyen</th><th class="px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Toplam</th><th class="px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Boşluk</th></tr></thead>
+          <tbody class="divide-y divide-slate-800/60">${summaryRows}</tbody>
+        </table>
+      </div>
+    </div>`;
     techHtml += `</div></details>`;
     html += techHtml;
 
@@ -3077,61 +3143,64 @@ function plan(opts){
         const b1OnlyKeys = new Set(headOverflowAssignments
           .filter(h => h.type === 'b1Only' || h.type === 'b1OnlyFallback')
           .map(h => `${h.start}-${h.end}-${h.taskId}`));
-        headDisplayHtml = '<div class="b1-list">' + allHeadSegs.map(s => {
+        headDisplayHtml = '<div class="b1-list space-y-2">' + allHeadSegs.map(s => {
           const realStart = m2t(workToReal(s.start, 'start'));
           const realEnd = m2t(workToReal(s.end, 'end'));
           const isB1Only = s.kind === 'b1only' || b1OnlyKeys.has(`${s.start}-${s.end}-${s.taskId}`);
           const isSupport = s.kind === 'support';
           const isOpenB1 = tasksCopy.find(t => t.id === s.taskId)?.isOpen;
-          const tag = isB1Only ? '<span class="b1-only-tag">B1-only</span>'
-            : isSupport ? '<span class="b1-only-tag" title="Teknisyenlere sığmayan kalan süre B1 boş zamanına yerleştirildi">B1 iş desteği</span>'
-            : (isOpenB1 ? '<span class="b1-only-tag">OPEN fill</span>' : '');
-          return `<div class="b1-row${isB1Only ? ' b1-only' : ''}">
-            <div class="b1-main-line">
-              <span class="b1-task">${escHtml(s.taskName)}</span>
-              <span class="b1-time">${realStart} - ${realEnd}</span>
+          const tag = isB1Only ? '<span class="b1-only-tag inline-flex items-center rounded-md border border-sky-500/30 bg-sky-500/15 px-2 py-0.5 text-[11px] font-semibold text-sky-300">B1-only</span>'
+            : isSupport ? '<span class="b1-only-tag inline-flex items-center rounded-md border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300" title="Teknisyenlere sığmayan kalan süre B1 boş zamanına yerleştirildi">B1 iş desteği</span>'
+            : (isOpenB1 ? '<span class="b1-only-tag inline-flex items-center rounded-md border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">OPEN fill</span>' : '');
+          return `<div class="b1-row${isB1Only ? ' b1-only' : ''} flex items-center justify-between gap-3 rounded-xl border border-slate-800/80 border-l-4 ${isB1Only ? 'border-l-sky-500' : 'border-l-amber-500'} bg-slate-950/60 px-3.5 py-2.5">
+            <div class="b1-main-line flex flex-wrap items-center gap-2 min-w-0">
+              <span class="b1-task text-sm font-medium text-slate-100 break-words">${escHtml(s.taskName)}</span>
+              ${tag ? `<span class="b1-meta-line">${tag}</span>` : ''}
             </div>
-            ${tag ? `<div class="b1-meta-line">${tag}</div>` : ''}
+            <span class="b1-time shrink-0 whitespace-nowrap rounded-lg border border-slate-700/80 bg-slate-900 px-2.5 py-1 font-mono text-xs sm:text-sm font-medium text-amber-300 tabular-nums">${realStart} - ${realEnd}</span>
           </div>`;
         }).join('') + '</div>';
       } else {
-        headDisplayHtml = '<div class="small" style="color:var(--muted)">B1 teknisyenine atanmış görev yok.</div>';
+        headDisplayHtml = '<div class="small rounded-xl border border-slate-800/80 bg-slate-950/50 p-3.5 text-xs sm:text-sm text-slate-400">B1 teknisyenine atanmış görev yok.</div>';
       }
       const headWorkTotal = allHeadSegs.reduce((s, seg) => s + (seg.end - seg.start), 0);
       const headOverflowTotal = headOverflowAssignments.reduce((s, h) => s + (h.end - h.start), 0);
       const headSupportTotal = headSupportAssignments.reduce((s, h) => s + (h.end - h.start), 0);
-      html += `<div class="card"><h2>👑 B1 Teknisyen Zaman Listesi <span class="role-tag head">${escHtml(headTech || '—')}</span></h2><div class="small" style="color:var(--muted);margin-bottom:8px">B1 için otomatik ayarlanan onay / B1-only zaman aralıkları aşağıdadır. Bu liste Supervisor Grup modunda da hesaplanır.</div>${headDisplayHtml}`;
-      html += `<div class="stat" style="margin-top:10px">
-        Toplam B1 yükü: <strong>${minutesToHoursStr(headWorkTotal)} saat</strong>
-        ${headOverflowTotal > 0 ? ` – B1’e özel atanan iş yükü: <strong style="color:var(--warn)">${minutesToHoursStr(headOverflowTotal)} saat</strong>` : ''}
-        ${headSupportTotal > 0 ? ` – Kalan işe B1 iş desteği: <strong style="color:var(--warn)">${minutesToHoursStr(headSupportTotal)} saat</strong>` : ''}
+      html += `<div class="card rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl p-4 sm:p-6 shadow-xl shadow-black/25 space-y-3">
+        <h2 class="font-display text-base sm:text-lg font-semibold text-sky-400 flex flex-wrap items-center gap-2">👑 B1 Teknisyen Zaman Listesi <span class="role-tag head inline-flex items-center rounded-lg border border-amber-500/30 bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-300">${escHtml(headTech || '—')}</span></h2>
+        <div class="small text-xs sm:text-sm text-slate-400">B1 için otomatik ayarlanan onay / B1-only zaman aralıkları aşağıdadır. Bu liste Supervisor Grup modunda da hesaplanır.</div>
+        ${headDisplayHtml}
+        <div class="stat rounded-xl border border-slate-800/80 border-l-4 border-l-amber-500 bg-amber-500/5 px-3.5 py-3 text-xs sm:text-sm text-slate-300 tabular-nums">
+          Toplam B1 yükü: <strong class="font-semibold text-white">${minutesToHoursStr(headWorkTotal)} saat</strong>
+          ${headOverflowTotal > 0 ? ` – B1’e özel atanan iş yükü: <strong class="font-semibold text-amber-300">${minutesToHoursStr(headOverflowTotal)} saat</strong>` : ''}
+          ${headSupportTotal > 0 ? ` – Kalan işe B1 iş desteği: <strong class="font-semibold text-amber-300">${minutesToHoursStr(headSupportTotal)} saat</strong>` : ''}
+        </div>
       </div>`;
-      html += `</div>`;
     }
 
     if (isGroup) {
       const coverage = buildSupervisorCoverage(techObjs, techRoles);
       if (coverage.length === 0) {
-        const covHtml = '<div class="warning" style="margin-top:0">⚠ Hiçbir Supervisor’e iş atanamadığı için denetim aralığı oluşmadı.</div>';
-        html += `<div class="card"><h2>🛡 Supervisor Denetim Pencereleri</h2>${covHtml}</div>`;
+        const covHtml = '<div class="warning rounded-xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-3.5 text-xs sm:text-sm text-rose-200">⚠ Hiçbir Supervisor’e iş atanamadığı için denetim aralığı oluşmadı.</div>';
+        html += `<div class="card rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl p-4 sm:p-6 shadow-xl shadow-black/25 space-y-3"><h2 class="font-display text-base sm:text-lg font-semibold text-sky-400">🛡 Supervisor Denetim Pencereleri</h2>${covHtml}</div>`;
       }
     }
 
     const earlyApprovals = R.earlyApprovals;
     if (earlyApprovals.length > 0) {
-      const rows = earlyApprovals.map(w => `<div class="small">⚠ <strong>${escHtml(w.taskName)}</strong> – B1 onayı ${m2t(workToReal(w.from, 'start'))} - ${m2t(workToReal(w.to, 'end'))}; işte bu saatten sonra da çalışma var (son çalışma bitişi ${m2t(workToReal(w.taskEnd, 'end'))}).</div>`).join('');
-      html += `<div class="attention"><strong>⚠ B1 Onayı İş Bitişinden Önce</strong><br><div class="small" style="margin:6px 0">B1'in uygun boş zamanı bulunamadığı için aşağıdaki işlerin onayı, işin son çalışma saatinden önceye yerleştirildi. Gerekirse B1 dolu saatlerini veya iş dağılımını gözden geçirin.</div>${rows}</div>`;
+      const rows = earlyApprovals.map(w => `<div class="small text-xs text-amber-200/90 tabular-nums">⚠ <strong class="font-semibold text-white">${escHtml(w.taskName)}</strong> – B1 onayı ${m2t(workToReal(w.from, 'start'))} - ${m2t(workToReal(w.to, 'end'))}; işte bu saatten sonra da çalışma var (son çalışma bitişi ${m2t(workToReal(w.taskEnd, 'end'))}).</div>`).join('');
+      html += `<div class="attention rounded-2xl border border-amber-500/30 border-l-4 border-l-amber-500 bg-amber-500/10 p-4 text-sm text-amber-200 space-y-1.5"><strong class="font-semibold text-amber-300">⚠ B1 Onayı İş Bitişinden Önce</strong><div class="small text-xs text-amber-200/80">B1'in uygun boş zamanı bulunamadığı için aşağıdaki işlerin onayı, işin son çalışma saatinden önceye yerleştirildi. Gerekirse B1 dolu saatlerini veya iş dağılımını gözden geçirin.</div>${rows}</div>`;
     }
 
     if (isGroup && supervisionGaps.length > 0) {
-      const gapHtml = supervisionGaps.map(g => `<div class="small">⚠ <strong>${escHtml(g.techName)}</strong> – ${escHtml(g.taskName)} işi denetimsiz: ${m2t(g.from)} - ${m2t(g.to)}</div>`).join('');
-      html += `<div class="warning"><strong>⛔ Denetim Açığı</strong><br><div class="small" style="color:var(--danger);margin:6px 0">Bu Teknisyenlerin işleri en az bir Supervisor olmadan başlatılamaz. Programı revize edin veya Supervisor saatlerini güncelleyin.</div>${gapHtml}</div>`;
+      const gapHtml = supervisionGaps.map(g => `<div class="small text-xs text-rose-200 tabular-nums">⚠ <strong class="font-semibold text-white">${escHtml(g.techName)}</strong> – ${escHtml(g.taskName)} işi denetimsiz: ${m2t(g.from)} - ${m2t(g.to)}</div>`).join('');
+      html += `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm text-rose-200 space-y-1.5"><strong class="font-semibold text-rose-300">⛔ Denetim Açığı</strong><div class="small text-xs text-rose-300/90">Bu Teknisyenlerin işleri en az bir Supervisor olmadan başlatılamaz. Programı revize edin veya Supervisor saatlerini güncelleyin.</div>${gapHtml}</div>`;
     }
 
     if (isGroup) {
       const idleNames = perTech.filter(p => p.segs.length === 0).map(p => p.name);
       if (idleNames.length > 0) {
-        html += `<div class="attention"><strong>⚠ Atama Yapılmayan Teknisyenler</strong><br><div class="small" style="color:var(--warn);margin-top:6px">Aşağıdaki teknisyenlere zaman aralığı atanamadı (yetersiz iş yükü veya denetim penceresi sorunu olabilir): ${idleNames.map(escHtml).join(', ')}</div></div>`;
+        html += `<div class="attention rounded-2xl border border-amber-500/30 border-l-4 border-l-amber-500 bg-amber-500/10 p-4 text-sm text-amber-200 space-y-1.5"><strong class="font-semibold text-amber-300">⚠ Atama Yapılmayan Teknisyenler</strong><div class="small text-xs text-amber-200/90">Aşağıdaki teknisyenlere zaman aralığı atanamadı (yetersiz iş yükü veya denetim penceresi sorunu olabilir): ${idleNames.map(escHtml).join(', ')}</div></div>`;
       }
     }
 
@@ -3143,17 +3212,17 @@ function plan(opts){
       });
       const headUnallocHtml = Object.values(headUnallocatedByTask).map(u => {
         const unallocHours = (u.totalMinutes / 60).toFixed(2).replace('.', ',');
-        return `<div class="small">${escHtml(u.taskName)} – B1 için ${unallocHours} saat atanamadı</div>`;
+        return `<div class="small text-xs text-rose-200/90 tabular-nums">• ${escHtml(u.taskName)} – B1 için ${unallocHours} saat atanamadı</div>`;
       }).join('');
-      html += `<div class="warning"><strong>⚠️ Atanamayan Onay Süreleri (B1)</strong><br>${headUnallocHtml}</div>`;
+      html += `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm text-rose-200 space-y-1.5"><strong class="font-semibold text-rose-300">⚠️ Atanamayan Onay Süreleri (B1)</strong>${headUnallocHtml}</div>`;
     }
 
     if (finalUnallocated.length > 0) {
       const finalUnallocHtml = finalUnallocated.map(u => {
         const unallocHours = (u.minutes / 60).toFixed(2).replace('.', ',');
-        return `<div class="small">${escHtml(u.task)} – ${unallocHours} saat hiçbir yere atanamadı (${escHtml(u.reason)})</div>`;
+        return `<div class="small text-xs text-rose-200/90 tabular-nums">• ${escHtml(u.task)} – ${unallocHours} saat hiçbir yere atanamadı (${escHtml(u.reason)})</div>`;
       }).join('');
-      html += `<div class="warning"><strong>⚠️ Tamamen Atanamayan İşler</strong><br>${finalUnallocHtml}</div>`;
+      html += `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm text-rose-200 space-y-1.5"><strong class="font-semibold text-rose-300">⚠️ Tamamen Atanamayan İşler</strong>${finalUnallocHtml}</div>`;
     }
 
     if (isGroup && unallocated.length > 0 && finalUnallocated.length === 0) {
@@ -3166,9 +3235,9 @@ function plan(opts){
       const items = Object.entries(aggregated).map(([name, info]) => {
         const h = (info.minutes / 60).toFixed(2).replace('.', ',');
         const reasons = Array.from(info.reasons).join('; ');
-        return `<div class="small">${escHtml(name)} – ${h} saat atanamadı (${escHtml(reasons)})</div>`;
+        return `<div class="small text-xs text-amber-200/90 tabular-nums">• ${escHtml(name)} – ${h} saat atanamadı (${escHtml(reasons)})</div>`;
       }).join('');
-      if (items) html += `<div class="attention"><strong>⚠ Atanamayan İş Parçaları</strong><br><div class="small" style="margin:6px 0">Aşağıdaki süreler hiçbir teknisyene yerleştirilemedi.</div>${items}</div>`;
+      if (items) html += `<div class="attention rounded-2xl border border-amber-500/30 border-l-4 border-l-amber-500 bg-amber-500/10 p-4 text-sm text-amber-200 space-y-1.5"><strong class="font-semibold text-amber-300">⚠ Atanamayan İş Parçaları</strong><div class="small text-xs text-amber-200/80">Aşağıdaki süreler hiçbir teknisyene yerleştirilemedi.</div>${items}</div>`;
     }
 
     const aiData = {
@@ -3219,12 +3288,14 @@ function plan(opts){
     };
     window._aiCopyData = JSON.stringify(aiData, null, 2);
 
-    html += `<button class="btn-ai-copy" id="btnAiCopy" onclick="copyAIVerisi()">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2L9.2 8.6 2 9.2l5.4 4.7-1.7 6.9 6.3-3.8 6.3 3.8-1.7-6.9L22 9.2l-7.2-.6L12 2z"/></svg> 
-      <span>🤖 AI İçin Tüm Planı Kopyala</span>
-    </button>`;
+    html += `<div class="pt-2 flex justify-center">
+      <button class="btn-ai-copy w-full sm:w-auto sm:min-w-[320px] inline-flex items-center justify-center gap-3 rounded-full bg-gradient-to-r from-emerald-500 to-sky-500 px-8 py-3.5 font-display text-sm sm:text-base font-semibold text-white shadow-xl shadow-emerald-500/20 hover:brightness-110 hover:shadow-sky-500/30 active:scale-[0.99] transition-all cursor-pointer [&_svg]:h-5 [&_svg]:w-5 [&_svg]:fill-current [&_svg]:shrink-0 [&.success]:!from-emerald-500 [&.success]:!to-emerald-600" id="btnAiCopy" onclick="copyAIVerisi()">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2L9.2 8.6 2 9.2l5.4 4.7-1.7 6.9 6.3-3.8 6.3 3.8-1.7-6.9L22 9.2l-7.2-.6L12 2z"/></svg> 
+        <span>🤖 AI İçin Tüm Planı Kopyala</span>
+      </button>
+    </div>`;
 
-    html += `<div class="footer-warning">⚠️ Bu planlama bir öneridir. Gerçek durumlarda işyeri prosedürlerine ve operasyonel ihtiyaçlara göre değişiklik yapılabilir.</div>`;
+    html += `<div class="footer-warning rounded-xl border border-slate-800/80 bg-slate-900/50 px-4 py-3 text-center text-xs text-slate-400">⚠️ Bu planlama bir öneridir. Gerçek durumlarda işyeri prosedürlerine ve operasyonel ihtiyaçlara göre değişiklik yapılabilir.</div>`;
     resultsDiv.innerHTML = html;
     if (view.keepScroll) {
       window.scrollTo({ top: view.scrollY || 0 });
