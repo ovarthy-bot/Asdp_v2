@@ -6,17 +6,19 @@
 <title>Uçak Bakım İş Planlama Sistemi – v22.0</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
-  tailwind.config = {
-    darkMode: 'class',
-    theme: {
-      extend: {
-        fontFamily: {
-          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-          display: ['Outfit', 'Inter', 'system-ui', 'sans-serif'],
+  if (typeof tailwind !== 'undefined') {
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            display: ['Outfit', 'Inter', 'system-ui', 'sans-serif'],
+          }
         }
       }
-    }
-  };
+    };
+  }
 </script>
 <link rel="stylesheet" href="style.css?v=20261013e"/>
 </head>
