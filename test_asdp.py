@@ -27,8 +27,8 @@ if needle not in js:
     raise SystemExit('Cannot find final plan render marker for test instrumentation')
 js = js.replace(needle, debug_probe + '    if (view.keepScroll)', 1)
 css = css.replace(css.split('\n')[0], '')  # Skip external font loading in tests.
-html = html.replace('<link rel="stylesheet" href="style.css?v=20261104a"/>', '<style>' + css + '</style>')
-html = html.replace('<script src="script.js?v=20261104a"></script>', '<script>' + js + '</script>')
+html = html.replace('<link rel="stylesheet" href="style.css?v=20261104b"/>', '<style>' + css + '</style>')
+html = html.replace('<script src="script.js?v=20261104b"></script>', '<script>' + js + '</script>')
 mock = """<script>(()=>{const d=new Map();Object.defineProperty(window,'localStorage',{configurable:true,value:{getItem:k=>d.has(k)?d.get(k):null,setItem:(k,v)=>d.set(k,String(v)),removeItem:k=>d.delete(k),clear:()=>d.clear()}})})();</script>"""
 html = html.replace('</head>', mock + '</head>')
 
