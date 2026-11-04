@@ -28,6 +28,7 @@ let programNote = localStorage.getItem('asdp_programNote') || '';
 let planMode = localStorage.getItem('asdp_planMode') || 'all';
 // Hassasiyet çubuğu (0-100): 0 = teknisyenler aynı işi aynı saatlerde yapar, 100 = B1 onayları düzenli aralıklarda.
 let sensitivity = (() => { const v = parseInt(localStorage.getItem('asdp_sensitivity'), 10); return Number.isFinite(v) ? Math.min(100, Math.max(0, v)) : 50; })();
+let allocationPriority = localStorage.getItem('asdp_allocationPriority') || 'bigFirst';
 let chosenScenario = ''; // Kullanıcının seçtiği senaryo anahtarı; '' = hassasiyete göre otomatik
 let techPreAssignments = load('asdp_techPreAssigns', []);
 
@@ -82,8 +83,13 @@ function applyAlgoUI(){
   if (slider) slider.value = sensitivity;
   const valueEl = $('sensitivityValue');
   if (valueEl) valueEl.textContent = sensitivityText();
+  document.querySelectorAll('input[name="allocationPriority"]').forEach(r => { r.checked = (r.value === allocationPriority); });
+  document.querySelectorAll('#priorityRow label').forEach(l => l.classList.toggle('active', l.dataset.priority === allocationPriority));
   const algoNote = $('algoSummaryNote');
-  if (algoNote) algoNote.textContent = 'Hassasiyet: ' + sensitivityText();
+  if (algoNote) {
+    const priText = (allocationPriority === 'smallFirst') ? 'Kısa İşler Önce' : 'Büyük İşler Önce';
+    algoNote.textContent = 'Hassasiyet: ' + sensitivityText() + ' • ' + priText;
+  }
   const algoDesc = $('algoDescription');
   if (algoDesc) {
     const now = sensitivity <= 20
@@ -451,6 +457,13 @@ if (sensitivityInput) {
     if (typeof window._asdpShowPlan === 'function') { savePlanInputs(); plan({ keepScroll: true }); }
   });
 }
+
+document.querySelectorAll('input[name="allocationPriority"]').forEach(r => r.addEventListener('change', e => {
+  allocationPriority = e.target.value;
+  localStorage.setItem('asdp_allocationPriority', allocationPriority);
+  applyAlgoUI();
+  if (typeof window._asdpShowPlan === 'function') { savePlanInputs(); plan({ keepScroll: true }); }
+}));
 
 mainContainer.addEventListener('input', e => {
   const i = +e.target.dataset.i;
@@ -1652,7 +1665,7 @@ function plan(opts){
           ? trimJobsForSync(jobs, G[0], overflow)
           : new Map();
         preTrimmed.forEach(n => { mandatoryOverflowCells += n; });
-        const alloc = lockstepPlan(jobs, G, capU, 'full', b1FreeCells).alloc;
+        const alloc = lockstepPlan(jobs, G, capU, 'full', b1FreeCells, allocationPriority).alloc;
         const crewPieces = crews.map((_, c) => piecesOf(jobs, alloc, c));
         // Doğal geçiş: her ekip için biçim seçilir ve işlerin gecikmesiz (doğal) bitiş hücreleri bulunur.
         const fin = new Map();
@@ -1699,7 +1712,10 @@ function plan(opts){
           fn(grid, crew, pcs, G[c], shiftOf, slack, recFor, null).left.forEach((n, id) => left.set(id, (left.get(id) || 0) + n));
         });
         // Yerleşemeyen birimler: önce işin kendi ekip(ler)inin, sonra boşluğu en çok olan ekiplerin kalan boşluklarına taşar.
-        jobs.slice().sort((a, b) => bound(a) - bound(b) || b.units - a.units || a.id - b.id).forEach(j => {
+        const unallocJobOrder = (allocationPriority === 'smallFirst')
+          ? (a, b) => bound(a) - bound(b) || a.units - b.units || a.id - b.id
+          : (a, b) => bound(a) - bound(b) || b.units - a.units || a.id - b.id;
+        jobs.slice().sort(unallocJobOrder).forEach(j => {
           const a = alloc.get(j.id);
           let rest = a.leftover + (left.get(j.id) || 0);
           if (rest > 0) {
@@ -1715,7 +1731,10 @@ function plan(opts){
         });
       }
       // OPEN işler zorunlu işlerden sonra, kalan boşluklara senkronize ekip düzeniyle yerleşir.
-      const openJobs = openList.filter(t => t.techWorkMin >= CELL).map(toJob).sort((a, b) => a.units - b.units || a.id - b.id);
+      const openSortFn = (allocationPriority === 'smallFirst')
+        ? (a, b) => a.units - b.units || a.id - b.id
+        : (a, b) => b.units - a.units || a.id - b.id;
+      const openJobs = openList.filter(t => t.techWorkMin >= CELL).map(toJob).sort(openSortFn);
       if (openJobs.length) {
         const G = crews.map(crew => crewSize(grid, crew));
         const capU = crews.map(crew => freeUnits(grid, crew));
@@ -1727,7 +1746,7 @@ function plan(opts){
         if (crews.length === 1 && openOverflow > 0 && openOverflow <= b1RemForOpen) {
           trimJobsForSync(openJobs, G[0], openOverflow);
         }
-        const alloc = lockstepPlan(openJobs, G, capU, 'full').alloc;
+        const alloc = lockstepPlan(openJobs, G, capU, 'full', undefined, allocationPriority).alloc;
         const crewPieces = crews.map((_, c) => piecesOf(openJobs, alloc, c));
         const left = new Map();
         crews.forEach((crew, c) => {
@@ -1741,7 +1760,7 @@ function plan(opts){
           const fn = best ? best.fn : LAYOUT_FNS[0];
           fn(grid, crew, pcs, G[c], () => 0, 0, recFor, null).left.forEach((n, id) => left.set(id, (left.get(id) || 0) + n));
         });
-        openJobs.forEach(j => {
+        openJobs.slice().sort(openSortFn).forEach(j => {
           const a = alloc.get(j.id);
           let rest = a.leftover + (left.get(j.id) || 0);
           if (rest > 0) {
@@ -1909,8 +1928,8 @@ function plan(opts){
       });
     }
 
-    const mandatoryTasks = tasksCopy.filter(t => !t.isOpen).sort((a, b) => b.techWorkMin - a.techWorkMin);
-    const openTasks = tasksCopy.filter(t => t.isOpen).sort((a, b) => a.techWorkMin - b.techWorkMin || a.id - b.id);
+    const mandatoryTasks = tasksCopy.filter(t => !t.isOpen).sort((a, b) => (allocationPriority === 'smallFirst' ? a.techWorkMin - b.techWorkMin : b.techWorkMin - a.techWorkMin));
+    const openTasks = tasksCopy.filter(t => t.isOpen).sort((a, b) => (allocationPriority === 'smallFirst' ? a.techWorkMin - b.techWorkMin : b.techWorkMin - a.techWorkMin) || a.id - b.id);
 
     if (singleTask) {
       equalShare = scheduleSingleTaskEqually(singleTask);
@@ -2613,26 +2632,31 @@ function plan(opts){
   // İş sırası denenerek toplam maliyeti en düşük dağıtım seçilir. level 'fast' = az sıra denemesi (senaryo önceliklendirmesi).
   // ============================================================
   const LS_REM = 8, LS_SPLIT = 2, LS_LEFT = 32;
-  function lockstepPlan(jobs, G, capU, level, b1Free){
+  function lockstepPlan(jobs, G, capU, level, b1Free, priorityPref){
+    priorityPref = priorityPref || allocationPriority || 'bigFirst';
     const m = G.length;
     const sumG = G.reduce((s, g) => s + g, 0);
     const desc = jobs.slice().sort((a, b) => b.units - a.units || a.id - b.id);
-    // Kapasite yetmiyorsa büyük işler önce yerleşir; tümüyle dışarıda kalan (küçük) işleri B1 tek başına yapar. B1'in günü
-    // bu işlere ve diğer işlerin onaylarına yetmiyorsa (b1Free: B1'in boş hücre sayısı) bunun yerine küçük işler önce
-    // yerleşir ve eksik en büyük işin payına düşer (kısmen atanmış iş B1 iş desteğiyle tamamlanır).
+    const asc = jobs.slice().sort((a, b) => a.units - b.units || a.id - b.id);
+    // Kapasite yetmiyorsa dağıtım stratejisine göre sıralanır:
+    // - smallFirst (Çoklu NRC Kapatma): Kısa işler önce yerleşir, vardiyada maksimum sayıda iş kartı kapatılır.
+    // - bigFirst (Varsayılan): Büyük işler önce yerleşir; B1 günü yetmiyorsa küçük işlere esner.
     const totalJobsU = jobs.reduce((s, j) => s + j.units, 0), cap = capU.reduce((s, c) => s + c, 0);
     const short = totalJobsU > cap;
-    let bigFirst = true;
-    if (short && b1Free !== undefined) {
+    let bigFirst = priorityPref !== 'smallFirst';
+    if (short && b1Free !== undefined && priorityPref !== 'smallFirst') {
       let room = cap, assigned = 0, b1Need = 0;
       desc.forEach(j => { if (room > 0) { assigned++; room -= Math.min(j.units, room); } else b1Need += j.units + 1; });
       bigFirst = b1Need + assigned <= b1Free;
     }
-    const orders = short ? [bigFirst ? desc : desc.slice().reverse()] : [desc, desc.slice().reverse()];
+    const orders = short
+      ? [priorityPref === 'smallFirst' ? asc : (bigFirst ? desc : asc)]
+      : (priorityPref === 'smallFirst' ? [asc, desc] : [desc, asc]);
     if (!short && level === 'full' && jobs.length > 2) {
+      const baseOrder = priorityPref === 'smallFirst' ? asc : desc;
       let seed = 7 + jobs.length * 13;
       for (let r = 0; r < 4; r++) {
-        const o = desc.slice();
+        const o = baseOrder.slice();
         for (let i = o.length - 1; i > 0; i--) {
           seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
           const k = seed % (i + 1);
@@ -2770,7 +2794,7 @@ function plan(opts){
       .filter(sizes => sizes.length > 1)
       .map(sizes => ({
         sizes,
-        cost: lockstepPlan(specUnitJobs, sizes, sizes.map(s => s * avgCells), 'fast').total + 2.5 * (sizes.length - 1)
+        cost: lockstepPlan(specUnitJobs, sizes, sizes.map(s => s * avgCells), 'fast', undefined, allocationPriority).total + 2.5 * (sizes.length - 1)
       }))
       .sort((a, b) => a.cost - b.cost || a.sizes.length - b.sizes.length || b.sizes[0] - a.sizes[0])
       .slice(0, MAX_PATTERNS);
@@ -3410,6 +3434,7 @@ function plan(opts){
     const aiData = {
       calisma_sistemi: isGroup ? "Grup (Supervisor Denetimli)" : "Herkes Bağımsız",
       dagitim_hassasiyeti: sensitivityText(),
+      dagitim_stratejisi: (allocationPriority === 'smallFirst' ? "Çoklu NRC Kapatma (Kısa İşler Önce)" : "Büyük İşler Önce (Varsayılan)"),
       secili_senaryo: R.spec.crews.map(c => c.map(i => technicians[i]).join(" + ")).join(" | "),
       toplam_is_sayisi: tasks.length,
       toplam_sure: totalInputHours.toFixed(2) + " saat",

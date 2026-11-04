@@ -447,19 +447,25 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
 /* Aktif Kart Durumları (Mode Radio & Scenario Chip) */
 #modeRow label.active,
+#priorityRow label.active,
 label[data-mode].active,
+label[data-priority].active,
 .scn-chip.active,
 .\[\&.active\]\:border-sky-500.active {
   border-color: #0ea5e9 !important;
 }
 #modeRow label.active,
+#priorityRow label.active,
 label[data-mode].active,
+label[data-priority].active,
 .scn-chip.active,
 .\[\&.active\]\:bg-sky-500\/10.active {
   background-color: rgba(14, 165, 233, 0.12) !important;
 }
 #modeRow label.active,
+#priorityRow label.active,
 label[data-mode].active,
+label[data-priority].active,
 .scn-chip.active,
 .\[\&.active\]\:ring-1.active,
 .\[\&.active\]\:ring-sky-500\/40.active,
