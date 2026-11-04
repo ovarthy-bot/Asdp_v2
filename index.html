@@ -23,7 +23,7 @@
     };
   }
 </script>
-<link rel="stylesheet" href="style.css?v=20261104e"/>
+<link rel="stylesheet" href="style.css?v=20261104f"/>
 </head>
 <body class="mode-all min-h-screen text-slate-100 antialiased selection:bg-sky-500/30 selection:text-sky-200">
 <div class="container max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8 space-y-4 sm:space-y-5" id="container">
@@ -115,19 +115,33 @@
       <!-- Kapasite Aşımında Dağıtım Stratejisi -->
       <div class="mt-4 pt-4 border-t border-slate-800/80">
         <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5">Kapasite Aşımında Dağıtım Stratejisi</label>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="priorityRow">
-          <label data-priority="bigFirst" class="flex items-start gap-3 rounded-xl border border-slate-700/80 bg-slate-950/60 p-3.5 sm:p-4 cursor-pointer transition-all hover:border-slate-600 [&.active]:border-sky-500 [&.active]:bg-sky-500/10 [&.active]:ring-1 [&.active]:ring-sky-500/40">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3" id="priorityRow">
+          <label data-priority="bigFirst" class="flex items-start gap-2.5 sm:gap-3 rounded-xl border border-slate-700/80 bg-slate-950/60 p-3 sm:p-3.5 cursor-pointer transition-all hover:border-slate-600 [&.active]:border-sky-500 [&.active]:bg-sky-500/10 [&.active]:ring-1 [&.active]:ring-sky-500/40">
             <input type="radio" name="allocationPriority" value="bigFirst" class="mt-0.5 h-4 w-4 shrink-0 accent-sky-500 cursor-pointer">
             <span class="flex flex-col gap-0.5 min-w-0">
-              <span class="text-sm font-semibold text-white">Büyük İşler Önce (Varsayılan)</span>
-              <span class="small text-xs text-slate-400">Ağır/uzun işlere öncelik verir, büyük işleri tamamlamayı hedefler</span>
+              <span class="text-xs sm:text-sm font-semibold text-white">Büyük İşler Önce</span>
+              <span class="small text-[11px] sm:text-xs text-slate-400 leading-snug">Uzun işlere öncelik verir, büyük işleri bitirmeyi hedefler</span>
             </span>
           </label>
-          <label data-priority="smallFirst" class="flex items-start gap-3 rounded-xl border border-slate-700/80 bg-slate-950/60 p-3.5 sm:p-4 cursor-pointer transition-all hover:border-slate-600 [&.active]:border-sky-500 [&.active]:bg-sky-500/10 [&.active]:ring-1 [&.active]:ring-sky-500/40">
+          <label data-priority="smallFirst" class="flex items-start gap-2.5 sm:gap-3 rounded-xl border border-slate-700/80 bg-slate-950/60 p-3 sm:p-3.5 cursor-pointer transition-all hover:border-slate-600 [&.active]:border-sky-500 [&.active]:bg-sky-500/10 [&.active]:ring-1 [&.active]:ring-sky-500/40">
             <input type="radio" name="allocationPriority" value="smallFirst" class="mt-0.5 h-4 w-4 shrink-0 accent-sky-500 cursor-pointer">
             <span class="flex flex-col gap-0.5 min-w-0">
-              <span class="text-sm font-semibold text-white">Çoklu NRC Kapatma (Kısa İşler Önce)</span>
-              <span class="small text-xs text-slate-400">Kısa işlere öncelik verir, vardiyada maksimum sayıda kart kapatır</span>
+              <span class="text-xs sm:text-sm font-semibold text-white">Çoklu NRC Kapatma</span>
+              <span class="small text-[11px] sm:text-xs text-slate-400 leading-snug">Kısa işlere öncelik verir, maksimum sayıda kart kapatır</span>
+            </span>
+          </label>
+          <label data-priority="hybridFair" class="flex items-start gap-2.5 sm:gap-3 rounded-xl border border-slate-700/80 bg-slate-950/60 p-3 sm:p-3.5 cursor-pointer transition-all hover:border-sky-500 [&.active]:border-sky-500 [&.active]:bg-sky-500/10 [&.active]:ring-1 [&.active]:ring-sky-500/40">
+            <input type="radio" name="allocationPriority" value="hybridFair" class="mt-0.5 h-4 w-4 shrink-0 accent-sky-500 cursor-pointer">
+            <span class="flex flex-col gap-0.5 min-w-0">
+              <span class="text-xs sm:text-sm font-semibold text-white">Akıllı Hibrit (Önerilen)</span>
+              <span class="small text-[11px] sm:text-xs text-slate-400 leading-snug">Kısa işleri bitirir, kalanı büyük işlere paylaştırır</span>
+            </span>
+          </label>
+          <label data-priority="proportional" class="flex items-start gap-2.5 sm:gap-3 rounded-xl border border-slate-700/80 bg-slate-950/60 p-3 sm:p-3.5 cursor-pointer transition-all hover:border-slate-600 [&.active]:border-sky-500 [&.active]:bg-sky-500/10 [&.active]:ring-1 [&.active]:ring-sky-500/40">
+            <input type="radio" name="allocationPriority" value="proportional" class="mt-0.5 h-4 w-4 shrink-0 accent-sky-500 cursor-pointer">
+            <span class="flex flex-col gap-0.5 min-w-0">
+              <span class="text-xs sm:text-sm font-semibold text-white">Tam Oransal Dağıtım</span>
+              <span class="small text-[11px] sm:text-xs text-slate-400 leading-snug">Tüm işlere kapasite oranında eşit/orantılı süre verir</span>
             </span>
           </label>
         </div>
@@ -352,6 +366,6 @@
   </div>
 </div>
 
-<script src="script.js?v=20261104e"></script>
+<script src="script.js?v=20261104f"></script>
 </body>
 </html>

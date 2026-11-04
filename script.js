@@ -87,7 +87,10 @@ function applyAlgoUI(){
   document.querySelectorAll('#priorityRow label').forEach(l => l.classList.toggle('active', l.dataset.priority === allocationPriority));
   const algoNote = $('algoSummaryNote');
   if (algoNote) {
-    const priText = (allocationPriority === 'smallFirst') ? 'Kısa İşler Önce' : 'Büyük İşler Önce';
+    const priText = (allocationPriority === 'smallFirst') ? 'Çoklu NRC Kapatma'
+      : (allocationPriority === 'hybridFair') ? 'Akıllı Hibrit'
+      : (allocationPriority === 'proportional') ? 'Tam Oransal'
+      : 'Büyük İşler Önce';
     algoNote.textContent = 'Hassasiyet: ' + sensitivityText() + ' • ' + priText;
   }
   const algoDesc = $('algoDescription');
@@ -1661,7 +1664,7 @@ function plan(opts){
         const cap = capU.reduce((s, c) => s + c, 0);
         const totalU = jobs.reduce((s, j) => s + j.units, 0);
         const overflow = totalU - cap;
-        const preTrimmed = (crews.length === 1 && overflow > 0 && overflow + mandatoryB1Cells <= b1FreeCells)
+        const preTrimmed = (crews.length === 1 && overflow > 0 && overflow + mandatoryB1Cells <= b1FreeCells && allocationPriority !== 'hybridFair' && allocationPriority !== 'proportional')
           ? trimJobsForSync(jobs, G[0], overflow)
           : new Map();
         preTrimmed.forEach(n => { mandatoryOverflowCells += n; });
@@ -1712,7 +1715,7 @@ function plan(opts){
           fn(grid, crew, pcs, G[c], shiftOf, slack, recFor, null).left.forEach((n, id) => left.set(id, (left.get(id) || 0) + n));
         });
         // Yerleşemeyen birimler: önce işin kendi ekip(ler)inin, sonra boşluğu en çok olan ekiplerin kalan boşluklarına taşar.
-        const unallocJobOrder = (allocationPriority === 'smallFirst')
+        const unallocJobOrder = (allocationPriority === 'smallFirst' || allocationPriority === 'hybridFair')
           ? (a, b) => bound(a) - bound(b) || a.units - b.units || a.id - b.id
           : (a, b) => bound(a) - bound(b) || b.units - a.units || a.id - b.id;
         jobs.slice().sort(unallocJobOrder).forEach(j => {
@@ -1731,7 +1734,7 @@ function plan(opts){
         });
       }
       // OPEN işler zorunlu işlerden sonra, kalan boşluklara senkronize ekip düzeniyle yerleşir.
-      const openSortFn = (allocationPriority === 'smallFirst')
+      const openSortFn = (allocationPriority === 'smallFirst' || allocationPriority === 'hybridFair')
         ? (a, b) => a.units - b.units || a.id - b.id
         : (a, b) => b.units - a.units || a.id - b.id;
       const openJobs = openList.filter(t => t.techWorkMin >= CELL).map(toJob).sort(openSortFn);
@@ -1743,7 +1746,7 @@ function plan(opts){
         const openHeadCells = openList.reduce((s, t) => s + Math.ceil((t.headAlloc || 0) / CELL), 0);
         const b1RemForOpen = Math.max(0, b1FreeCells - mandatoryB1Cells - mandatoryOverflowCells - openHeadCells);
         const openOverflow = totalOpenU - cap;
-        if (crews.length === 1 && openOverflow > 0 && openOverflow <= b1RemForOpen) {
+        if (crews.length === 1 && openOverflow > 0 && openOverflow <= b1RemForOpen && allocationPriority !== 'hybridFair' && allocationPriority !== 'proportional') {
           trimJobsForSync(openJobs, G[0], openOverflow);
         }
         const alloc = lockstepPlan(openJobs, G, capU, 'full', undefined, allocationPriority).alloc;
@@ -2632,6 +2635,87 @@ function plan(opts){
   // İş sırası denenerek toplam maliyeti en düşük dağıtım seçilir. level 'fast' = az sıra denemesi (senaryo önceliklendirmesi).
   // ============================================================
   const LS_REM = 8, LS_SPLIT = 2, LS_LEFT = 32;
+
+  function computeFairUnits(jobList, G, capU, strategy) {
+    const cap = capU.reduce((s, c) => s + c, 0);
+    const totalU = jobList.reduce((s, j) => s + j.units, 0);
+    if (totalU <= cap) return new Map(jobList.map(j => [j.id, j.units]));
+
+    const step = (G && G.length && G[0] > 0) ? G[0] : 1;
+    const maxCells = Math.floor(cap / step);
+    const targetUnits = new Map();
+
+    if (strategy === 'hybridFair') {
+      const asc = jobList.slice().sort((a, b) => a.units - b.units || a.id - b.id);
+      let remainingCap = cap;
+      const fullJobs = [];
+      const slicedJobs = [];
+
+      for (let i = 0; i < asc.length; i++) {
+        const j = asc[i];
+        const jobsLeftAfterThis = asc.length - (i + 1);
+        const minCapNeededForRest = jobsLeftAfterThis * step;
+        if (remainingCap - j.units >= minCapNeededForRest && j.units <= remainingCap) {
+          fullJobs.push(j);
+          remainingCap -= j.units;
+        } else {
+          slicedJobs.push(j);
+        }
+      }
+
+      fullJobs.forEach(j => targetUnits.set(j.id, j.units));
+
+      if (slicedJobs.length > 0) {
+        const availableCells = Math.floor(remainingCap / step);
+        const baseCells = Math.floor(availableCells / slicedJobs.length);
+        let extraCells = availableCells % slicedJobs.length;
+
+        slicedJobs.forEach(j => {
+          let cells = Math.max(1, baseCells);
+          if (extraCells > 0) {
+            cells++;
+            extraCells--;
+          }
+          const u = Math.min(j.units, cells * step);
+          targetUnits.set(j.id, u);
+        });
+      }
+    } else if (strategy === 'proportional') {
+      const n = jobList.length;
+      const availableCells = maxCells;
+      const baseCellsPerJob = 1;
+      let leftoverCells = Math.max(0, availableCells - n * baseCellsPerJob);
+
+      const weights = jobList.map(j => ({
+        id: j.id,
+        units: j.units,
+        weight: j.units / (totalU || 1)
+      }));
+
+      const rawAlloc = weights.map(w => {
+        const exact = w.weight * leftoverCells;
+        const whole = Math.floor(exact);
+        return { id: w.id, whole, frac: exact - whole };
+      });
+
+      let assignedExtras = rawAlloc.reduce((s, r) => s + r.whole, 0);
+      let remainingToDistribute = leftoverCells - assignedExtras;
+
+      rawAlloc.sort((a, b) => b.frac - a.frac);
+      for (let i = 0; i < remainingToDistribute; i++) {
+        rawAlloc[i].whole++;
+      }
+
+      const allocMap = new Map(rawAlloc.map(r => [r.id, r.whole]));
+      jobList.forEach(j => {
+        const cells = baseCellsPerJob + (allocMap.get(j.id) || 0);
+        targetUnits.set(j.id, Math.min(j.units, cells * step));
+      });
+    }
+
+    return targetUnits;
+  }
+
   function lockstepPlan(jobs, G, capU, level, b1Free, priorityPref){
     priorityPref = priorityPref || allocationPriority || 'bigFirst';
     const m = G.length;
@@ -2640,20 +2724,25 @@ function plan(opts){
     const asc = jobs.slice().sort((a, b) => a.units - b.units || a.id - b.id);
     // Kapasite yetmiyorsa dağıtım stratejisine göre sıralanır:
     // - smallFirst (Çoklu NRC Kapatma): Kısa işler önce yerleşir, vardiyada maksimum sayıda iş kartı kapatılır.
+    // - hybridFair (Akıllı Hibrit): Kısa işler biter, kalan süre büyük işlere paylaştırılır (0 saat kalan olmaz).
+    // - proportional (Tam Oransal): Tüm işler kapasite oranında zaman dilimi alır.
     // - bigFirst (Varsayılan): Büyük işler önce yerleşir; B1 günü yetmiyorsa küçük işlere esner.
     const totalJobsU = jobs.reduce((s, j) => s + j.units, 0), cap = capU.reduce((s, c) => s + c, 0);
     const short = totalJobsU > cap;
-    let bigFirst = priorityPref !== 'smallFirst';
-    if (short && b1Free !== undefined && priorityPref !== 'smallFirst') {
+    let bigFirst = priorityPref !== 'smallFirst' && priorityPref !== 'hybridFair' && priorityPref !== 'proportional';
+    if (short && b1Free !== undefined && priorityPref === 'bigFirst') {
       let room = cap, assigned = 0, b1Need = 0;
       desc.forEach(j => { if (room > 0) { assigned++; room -= Math.min(j.units, room); } else b1Need += j.units + 1; });
       bigFirst = b1Need + assigned <= b1Free;
     }
+    const targetMap = (short && (priorityPref === 'hybridFair' || priorityPref === 'proportional'))
+      ? computeFairUnits(jobs, G, capU, priorityPref)
+      : null;
     const orders = short
-      ? [priorityPref === 'smallFirst' ? asc : (bigFirst ? desc : asc)]
-      : (priorityPref === 'smallFirst' ? [asc, desc] : [desc, asc]);
+      ? [(priorityPref === 'smallFirst' || priorityPref === 'hybridFair') ? asc : (bigFirst ? desc : asc)]
+      : ((priorityPref === 'smallFirst' || priorityPref === 'hybridFair') ? [asc, desc] : [desc, asc]);
     if (!short && level === 'full' && jobs.length > 2) {
-      const baseOrder = priorityPref === 'smallFirst' ? asc : desc;
+      const baseOrder = (priorityPref === 'smallFirst' || priorityPref === 'hybridFair') ? asc : desc;
       let seed = 7 + jobs.length * 13;
       for (let r = 0; r < 4; r++) {
         const o = baseOrder.slice();
@@ -2671,12 +2760,13 @@ function plan(opts){
       const alloc = new Map();
       let total = 0, span = 0, remAfter = totalJobsU;
       order.forEach(j => {
-        remAfter -= j.units;
+        const jobTargetU = targetMap ? (targetMap.get(j.id) || j.units) : j.units;
+        remAfter -= jobTargetU;
         const room = c => Math.max(0, capU[c] - used[c]);
         let pick = null;
         const consider = parts => {
           const placed = parts.reduce((s, p) => s + p.units, 0);
-          let cost = LS_LEFT * (j.units - placed) + LS_SPLIT * (parts.length - 1);
+          let cost = LS_LEFT * (jobTargetU - placed) + LS_SPLIT * (parts.length - 1);
           let newSpan = span, load = 0;
           parts.forEach(p => {
             cost += LS_REM * (p.units % G[p.c]);
@@ -2694,31 +2784,31 @@ function plan(opts){
           cost += (newSpan - span) + 0.01 * load;
           if (!pick || cost < pick.cost - 1e-9) pick = { cost, parts, newSpan };
         };
-        for (let c = 0; c < m; c++) if (room(c) > 0) consider([{ c, units: Math.min(j.units, room(c)) }]);
+        for (let c = 0; c < m; c++) if (room(c) > 0) consider([{ c, units: Math.min(jobTargetU, room(c)) }]);
         for (let a = 0; a < m; a++) for (let b = 0; b < m; b++) {
           if (a === b || room(a) <= 0 || room(b) <= 0) continue;
-          for (let t = 1; t * G[a] < j.units && t * G[a] <= room(a); t++) {
+          for (let t = 1; t * G[a] < jobTargetU && t * G[a] <= room(a); t++) {
             const ua = t * G[a];
-            const ub = Math.min(j.units - ua, room(b));
+            const ub = Math.min(jobTargetU - ua, room(b));
             if (ub > 0) consider([{ c: a, units: ua }, { c: b, units: ub }]);
           }
         }
         if (m >= 3 && level === 'full') {
           for (let a = 0; a < m; a++) for (let b = a + 1; b < m; b++) for (let c = 0; c < m; c++) {
             if (c === a || c === b || room(a) < G[a] || room(b) < G[b] || room(c) <= 0) continue;
-            for (let ta = 1; ta * G[a] < j.units && ta * G[a] <= room(a); ta++) {
+            for (let ta = 1; ta * G[a] < jobTargetU && ta * G[a] <= room(a); ta++) {
               const ua = ta * G[a];
-              for (let tb = 1; ua + tb * G[b] < j.units && tb * G[b] <= room(b); tb++) {
+              for (let tb = 1; ua + tb * G[b] < jobTargetU && tb * G[b] <= room(b); tb++) {
                 const ub = tb * G[b];
-                const uc = j.units - ua - ub;
+                const uc = jobTargetU - ua - ub;
                 if (uc <= room(c) && uc % G[c] === 0) consider([{ c: a, units: ua }, { c: b, units: ub }, { c: c, units: uc }]);
               }
             }
           }
         }
-        if (!pick) pick = { cost: LS_LEFT * j.units, parts: [], newSpan: span };
+        if (!pick) pick = { cost: LS_LEFT * jobTargetU, parts: [], newSpan: span };
         // İki ekibin boşluğu işe yetmediyse kalan, boşluğu en çok olan diğer ekiplere dağıtılır.
-        let rest = j.units - pick.parts.reduce((s, p) => s + p.units, 0);
+        let rest = jobTargetU - pick.parts.reduce((s, p) => s + p.units, 0);
         if (rest > 0) {
           const inUse = new Set(pick.parts.map(p => p.c));
           const more = [];
@@ -2735,7 +2825,8 @@ function plan(opts){
           span = Math.max(span, used[p.c] / G[p.c]);
         });
         total += pick.cost;
-        alloc.set(j.id, { parts: pick.parts, leftover: rest });
+        const placedUnits = pick.parts.reduce((s, p) => s + p.units, 0);
+        alloc.set(j.id, { parts: pick.parts, leftover: j.units - placedUnits });
       });
       if (!best || total < best.total - 1e-9) best = { total, alloc };
     });
@@ -3547,7 +3638,10 @@ function plan(opts){
     const aiData = {
       calisma_sistemi: isGroup ? "Grup (Supervisor Denetimli)" : "Herkes Bağımsız",
       dagitim_hassasiyeti: sensitivityText(),
-      dagitim_stratejisi: (allocationPriority === 'smallFirst' ? "Çoklu NRC Kapatma (Kısa İşler Önce)" : "Büyük İşler Önce (Varsayılan)"),
+      dagitim_stratejisi: (allocationPriority === 'smallFirst' ? "Çoklu NRC Kapatma (Kısa İşler Önce)"
+        : allocationPriority === 'hybridFair' ? "Akıllı Hibrit (Çoklu Kapat + Kalanı Paylaştır)"
+        : allocationPriority === 'proportional' ? "Tam Oransal Dağıtım (Time-Slicing)"
+        : "Büyük İşler Önce (Varsayılan)"),
       secili_senaryo: R.spec.crews.map(c => c.map(i => technicians[i]).join(" + ")).join(" | "),
       toplam_is_sayisi: tasks.length,
       toplam_sure: totalInputHours.toFixed(2) + " saat",
