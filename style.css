@@ -19,7 +19,6 @@ body {
 
 /* Çalışma modu görünürlük kuralları */
 body.mode-all .group-only { display: none !important; }
-body.mode-group .all-only { display: none !important; }
 
 /* Saat seçici: simge gizli kalır ancak showPicker() uyumluluğu için display:none kullanılmaz */
 input[type="time"] { cursor: pointer; }
