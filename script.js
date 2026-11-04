@@ -3408,27 +3408,140 @@ function plan(opts){
       html += `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm text-rose-200 space-y-1.5"><strong class="font-semibold text-rose-300">⚠️ Atanamayan Onay Süreleri (B1)</strong>${headUnallocHtml}</div>`;
     }
 
-    if (finalUnallocated.length > 0) {
-      const finalUnallocHtml = finalUnallocated.map(u => {
-        const unallocHours = (u.minutes / 60).toFixed(2).replace('.', ',');
-        return `<div class="small text-xs text-rose-200/90 tabular-nums">• ${escHtml(u.task)} – ${unallocHours} saat hiçbir yere atanamadı (${escHtml(u.reason)})</div>`;
+    // ------------------------------------------------------------
+    // Atanamayan / Kısmen Atanan İşlerin Tablo Raporu
+    // ------------------------------------------------------------
+    const unallocMap = new Map();
+    const seenTasks = new Set();
+    finalUnallocated.forEach(u => {
+      const taskName = u.task || (tasks[u.taskId]?.name);
+      if (!taskName) return;
+      seenTasks.add(taskName);
+      if (!unallocMap.has(taskName)) {
+        const taskObj = tasksCopy.find(t => t.id === u.taskId || t.name === taskName) || tasks.find(t => t.name === taskName);
+        const totalMin = taskObj ? (taskObj.rawMin || Math.round((taskObj.inputHours || parseFloat(taskObj.hours) || 0) * 60)) : u.minutes;
+        unallocMap.set(taskName, {
+          taskId: Number.isFinite(u.taskId) ? u.taskId : (taskObj?.id),
+          taskName: taskName,
+          isOpen: !!(taskObj?.isOpen || taskObj?.open),
+          totalMin: totalMin,
+          missingMin: 0,
+          reasons: new Set()
+        });
+      }
+      const entry = unallocMap.get(taskName);
+      entry.missingMin += (u.minutes || 0);
+      if (u.reason) {
+        const cleanReason = u.reason.replace(/; işin mümkün olan kısmı yerleştirildi, kalan kısım atanamadı/g, '').trim();
+        entry.reasons.add(cleanReason);
+      }
+    });
+
+    unallocated.forEach(u => {
+      const taskName = u.task || (tasks[u.taskId]?.name);
+      if (!taskName || seenTasks.has(taskName)) return;
+      if (!unallocMap.has(taskName)) {
+        const taskObj = tasksCopy.find(t => t.id === u.taskId || t.name === taskName) || tasks.find(t => t.name === taskName);
+        const totalMin = taskObj ? (taskObj.rawMin || Math.round((taskObj.inputHours || parseFloat(taskObj.hours) || 0) * 60)) : u.minutes;
+        unallocMap.set(taskName, {
+          taskId: Number.isFinite(u.taskId) ? u.taskId : (taskObj?.id),
+          taskName: taskName,
+          isOpen: !!(taskObj?.isOpen || taskObj?.open),
+          totalMin: totalMin,
+          missingMin: 0,
+          reasons: new Set()
+        });
+      }
+      const entry = unallocMap.get(taskName);
+      entry.missingMin += (u.minutes || 0);
+      if (u.reason) {
+        const cleanReason = u.reason.replace(/; işin mümkün olan kısmı yerleştirildi, kalan kısım atanamadı/g, '').trim();
+        entry.reasons.add(cleanReason);
+      }
+    });
+
+    const unallocReport = Array.from(unallocMap.values()).map(entry => {
+      const missingMin = Math.min(entry.totalMin, entry.missingMin);
+      const assignedMin = Math.max(0, entry.totalMin - missingMin);
+      const isPartial = assignedMin > 0;
+      let reasonStr = Array.from(entry.reasons).join('; ');
+      if (!reasonStr) {
+        reasonStr = isPartial ? 'Teknisyen ve B1 kapasitesi doldu' : 'B1 kapasitesi dolu olduğu için iş kimseye atanmadı';
+      }
+      return {
+        ...entry,
+        missingMin,
+        assignedMin,
+        isPartial,
+        reason: reasonStr
+      };
+    });
+
+    const partialTasks = unallocReport.filter(u => u.isPartial);
+    const completelyUnallocatedTasks = unallocReport.filter(u => !u.isPartial);
+
+    const makeUnallocTable = (items, accentColor) => {
+      const isAmber = accentColor === 'amber';
+      const rows = items.map(u => {
+        const missingHoursStr = (u.missingMin / 60).toFixed(2).replace('.', ',');
+        const totalHoursStr = (u.totalMin / 60).toFixed(2).replace('.', ',');
+        const assignedHoursStr = (u.assignedMin / 60).toFixed(2).replace('.', ',');
+        const statusClass = isAmber ? 'text-amber-300' : 'text-rose-300';
+        const assignedClass = u.assignedMin > 0 ? 'text-emerald-400' : 'text-slate-500';
+        return '<tr class="hover:bg-slate-800/40 transition-colors">' +
+          '<td class="px-3 sm:px-3.5 py-2.5 font-semibold text-white whitespace-nowrap">' +
+            '<span class="inline-flex items-center gap-1.5">' +
+              '<span>' + escHtml(u.taskName) + '</span>' +
+              '<span class="rounded border px-1.5 py-0.5 text-[10px] font-medium ' + (u.isOpen ? 'border-sky-500/30 text-sky-400 bg-sky-500/10' : 'border-rose-500/30 text-rose-400 bg-rose-500/10') + '">' + (u.isOpen ? 'OPEN' : 'Zorunlu') + '</span>' +
+            '</span>' +
+          '</td>' +
+          '<td class="px-3 sm:px-3.5 py-2.5 text-center font-semibold ' + statusClass + ' tabular-nums whitespace-nowrap">' + missingHoursStr + ' / ' + totalHoursStr + ' sa</td>' +
+          '<td class="px-3 sm:px-3.5 py-2.5 text-center font-medium ' + assignedClass + ' tabular-nums whitespace-nowrap">' + assignedHoursStr + ' sa</td>' +
+          '<td class="px-3 sm:px-3.5 py-2.5 text-slate-300 text-xs leading-snug">' + escHtml(u.reason) + '</td>' +
+        '</tr>';
       }).join('');
-      html += `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm text-rose-200 space-y-1.5"><strong class="font-semibold text-rose-300">⚠️ Tamamen Atanamayan İşler</strong>${finalUnallocHtml}</div>`;
+
+      return '<div class="overflow-x-auto rounded-xl border ' + (isAmber ? 'border-amber-500/25 bg-slate-950/70' : 'border-rose-500/25 bg-slate-950/70') + '">' +
+        '<table class="table min-w-full divide-y divide-slate-800/80 text-xs sm:text-sm">' +
+          '<thead class="bg-slate-900/90 text-slate-400 select-none">' +
+            '<tr>' +
+              '<th class="px-3 sm:px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider">İş Tanımı</th>' +
+              '<th class="px-3 sm:px-3.5 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider">Açıkta Kalan / Toplam</th>' +
+              '<th class="px-3 sm:px-3.5 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider">Atanan Süre</th>' +
+              '<th class="px-3 sm:px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider">Kök Neden</th>' +
+            '</tr>' +
+          '</thead>' +
+          '<tbody class="divide-y divide-slate-800/60">' + rows + '</tbody>' +
+        '</table>' +
+      '</div>';
+    };
+
+    if (partialTasks.length > 0) {
+      html += '<div id="partialUnallocatedCard" class="attention rounded-2xl border border-amber-500/35 border-l-4 border-l-amber-500 bg-amber-500/10 p-4 sm:p-5 text-sm text-amber-200 shadow-xl space-y-3">' +
+        '<div class="flex items-center justify-between gap-2">' +
+          '<strong class="font-display text-sm sm:text-base font-semibold text-amber-300 flex items-center gap-2">' +
+            '<span>⚡</span>' +
+            '<span>Kısmen Atanan İşler</span>' +
+          '</strong>' +
+          '<span class="rounded-full border border-amber-500/30 bg-amber-500/20 px-2.5 py-0.5 text-xs font-semibold text-amber-300 tabular-nums">' + partialTasks.length + ' iş</span>' +
+        '</div>' +
+        '<div class="small text-xs text-amber-200/85">Bu işlere teknisyen veya B1 tarafından başlanmış, ancak vardiya/kapasite sınırı nedeniyle kalan saatler tamamlanamamıştır.</div>' +
+        makeUnallocTable(partialTasks, 'amber') +
+      '</div>';
     }
 
-    if (isGroup && unallocated.length > 0 && finalUnallocated.length === 0) {
-      const aggregated = {};
-      unallocated.forEach(u => {
-        if (!aggregated[u.task]) aggregated[u.task] = { minutes: 0, reasons: new Set() };
-        aggregated[u.task].minutes += u.minutes;
-        aggregated[u.task].reasons.add(u.reason);
-      });
-      const items = Object.entries(aggregated).map(([name, info]) => {
-        const h = (info.minutes / 60).toFixed(2).replace('.', ',');
-        const reasons = Array.from(info.reasons).join('; ');
-        return `<div class="small text-xs text-amber-200/90 tabular-nums">• ${escHtml(name)} – ${h} saat atanamadı (${escHtml(reasons)})</div>`;
-      }).join('');
-      if (items) html += `<div class="attention rounded-2xl border border-amber-500/30 border-l-4 border-l-amber-500 bg-amber-500/10 p-4 text-sm text-amber-200 space-y-1.5"><strong class="font-semibold text-amber-300">⚠ Atanamayan İş Parçaları</strong><div class="small text-xs text-amber-200/80">Aşağıdaki süreler hiçbir teknisyene yerleştirilemedi.</div>${items}</div>`;
+    if (completelyUnallocatedTasks.length > 0) {
+      html += '<div id="fullUnallocatedCard" class="warning rounded-2xl border border-rose-500/35 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 sm:p-5 text-sm text-rose-200 shadow-xl space-y-3">' +
+        '<div class="flex items-center justify-between gap-2">' +
+          '<strong class="font-display text-sm sm:text-base font-semibold text-rose-300 flex items-center gap-2">' +
+            '<span>⚠️</span>' +
+            '<span>Tamamen Atanamayan İşler</span>' +
+          '</strong>' +
+          '<span class="rounded-full border border-rose-500/30 bg-rose-500/20 px-2.5 py-0.5 text-xs font-semibold text-rose-300 tabular-nums">' + completelyUnallocatedTasks.length + ' iş</span>' +
+        '</div>' +
+        '<div class="small text-xs text-rose-200/85">Kapasite yetersizliği nedeniyle bu vardiyada personele yerleştirilemeyen işler sonraki vardiyaya devretmiştir.</div>' +
+        makeUnallocTable(completelyUnallocatedTasks, 'rose') +
+      '</div>';
     }
 
     const aiData = {
@@ -3472,10 +3585,14 @@ function plan(opts){
         ...(s.kind === 'support' ? { tur: 'B1 iş desteği' } : s.kind === 'b1only' ? { tur: 'B1-only' } : {})
       })) : [],
       tek_is_esit_paylasim: equalShareSummary || undefined,
-      atanmayan_isler: finalUnallocated.map(u => ({
-        is_no: u.task,
-        sure: (u.minutes / 60).toFixed(2) + " sa",
-        sebep: u.reason
+      atanmayan_isler: unallocReport.map(u => ({
+        is_no: u.taskName,
+        sure: (u.missingMin / 60).toFixed(2) + " sa",
+        sebep: u.reason,
+        durum: u.isPartial ? "Kısmen Atandı" : "Tamamen Atanamadı",
+        acikta_kalan_saat: (u.missingMin / 60).toFixed(2) + " sa",
+        toplam_sure: (u.totalMin / 60).toFixed(2) + " sa",
+        atanan_sure: (u.assignedMin / 60).toFixed(2) + " sa"
       }))
     };
     window._aiCopyData = JSON.stringify(aiData, null, 2);
