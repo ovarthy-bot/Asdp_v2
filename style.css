@@ -648,3 +648,23 @@ label[data-priority].active,
     display: none !important;
   }
 }
+
+/* ==================== AYARLAR MODAL & COLLAPSIBLE DETAYLARI ==================== */
+.fixed { position: fixed; }
+.inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
+.z-50 { z-index: 50; }
+.overflow-y-auto { overflow-y: auto; }
+.max-h-\[92vh\] { max-height: 92vh; }
+.bg-black\/80 { background-color: rgba(0, 0, 0, 0.8); }
+.bg-slate-900\/95 { background-color: rgba(15, 23, 42, 0.95); }
+.backdrop-blur-md { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.rounded-3xl { border-radius: 1.5rem; }
+
+details.collapsible summary {
+  cursor: pointer;
+  list-style: none;
+}
+details.collapsible summary::-webkit-details-marker {
+  display: none;
+}
+

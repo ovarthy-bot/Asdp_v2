@@ -53,22 +53,72 @@ function normalizeTechRoles(){
   save('asdp_techRoles', techRoles);
 }
 
+function updateQuickSettingsBar(){
+  const ss = $('shiftStart')?.value || '03:45';
+  const se = $('shiftEnd')?.value || '11:45';
+  const bs = $('breakStart')?.value;
+  const be = $('breakEnd')?.value;
+  const shiftText = $('quickShiftText');
+  if (shiftText) {
+    let t = `${ss} - ${se}`;
+    if (bs && be) t += ` (Mola: ${bs}-${be})`;
+    shiftText.textContent = t;
+  }
+  const modeText = $('quickModeText');
+  if (modeText) {
+    modeText.textContent = (planMode === 'all') ? 'Supervisor ALL' : 'Supervisor Grup';
+  }
+  const stratText = $('quickStrategyText');
+  if (stratText) {
+    const stratNames = {
+      hybridFair: 'Akıllı Hibrit',
+      smallFirst: 'Çoklu NRC',
+      bigFirst: 'Büyük İşler',
+      proportional: 'Tam Oransal'
+    };
+    stratText.textContent = stratNames[allocationPriority] || 'Akıllı Hibrit';
+  }
+}
+
+function openSettingsModal(){
+  const modal = $('settingsModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.body.classList.add('overflow-hidden');
+  }
+}
+
+function closeSettingsModal(){
+  const modal = $('settingsModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    document.body.classList.remove('overflow-hidden');
+  }
+  updateQuickSettingsBar();
+}
+
 function applyModeUI(){
   document.body.classList.toggle('mode-all', planMode === 'all');
   document.body.classList.toggle('mode-group', planMode === 'group');
   document.querySelectorAll('input[name="planMode"]').forEach(r => { r.checked = (r.value === planMode); });
   document.querySelectorAll('#modeRow label').forEach(l => l.classList.toggle('active', l.dataset.mode === planMode));
-  $('modeSummaryNote').textContent = (planMode === 'all') ? 'Mevcut: Supervisor ALL' : 'Mevcut: Supervisor Grup';
+  const modeNote = $('modeSummaryNote');
+  if (modeNote) modeNote.textContent = (planMode === 'all') ? 'Mevcut: Supervisor ALL' : 'Mevcut: Supervisor Grup';
   const desc = $('modeDescription');
-  if (planMode === 'all') {
-    desc.innerHTML = 'Klasik mod: tek B1 teknisyen her işin bitişinde 15 dk onay süresi alır. Onay aralıkları mümkün olduğunca birbirine yığılmadan planlanır.';
-  } else {
-    desc.innerHTML = 'Süpervizör grup modu — 3 rol:<br>' +
-      '• <strong>Supervisor</strong>: hem iş yapar hem <strong>aynı işte</strong> aynı saatte çalışan Teknisyenleri denetler. Bir Supervisor aynı işte birden fazla Teknisyene denetim yapabilir; bir Teknisyene farklı zamanlarda birden fazla Supervisor da denetim yapabilir.<br>' +
-      '• <strong>Kalifiyeli</strong>: tek başına çalışabilir, denetim aramaz, denetleme yapmaz (Kalifiyeli ile Teknisyen Supervisor olmadan birlikte çalışamaz).<br>' +
-      '• <strong>Teknisyen</strong>: yalnızca <strong>aynı işte</strong> en az bir Supervisor’ün çalıştığı saatlerde iş alabilir; asla denetimsiz çalışmaz.<br>' +
-      'Teknisyen ile onu denetleyen Supervisor <strong>aynı iş ve birebir aynı saat aralığında</strong> listelenir; Supervisor ve Teknisyen blokları farklı yerde başlayıp bitiyorsa bloklar, birbirinin sınırlarından bölünerek eşleştirilir.';
+  if (desc) {
+    if (planMode === 'all') {
+      desc.innerHTML = 'Klasik mod: tek B1 teknisyen her işin bitişinde 15 dk onay süresi alır. Onay aralıkları mümkün olduğunca birbirine yığılmadan planlanır.';
+    } else {
+      desc.innerHTML = 'Süpervizör grup modu — 3 rol:<br>' +
+        '• <strong>Supervisor</strong>: hem iş yapar hem <strong>aynı işte</strong> aynı saatte çalışan Teknisyenleri denetler. Bir Supervisor aynı işte birden fazla Teknisyene denetim yapabilir; bir Teknisyene farklı zamanlarda birden fazla Supervisor da denetim yapabilir.<br>' +
+        '• <strong>Kalifiyeli</strong>: tek başına çalışabilir, denetim aramaz, denetleme yapmaz (Kalifiyeli ile Teknisyen Supervisor olmadan birlikte çalışamaz).<br>' +
+        '• <strong>Teknisyen</strong>: yalnızca <strong>aynı işte</strong> en az bir Supervisor’ün çalıştığı saatlerde iş alabilir; asla denetimsiz çalışmaz.<br>' +
+        'Teknisyen ile onu denetleyen Supervisor <strong>aynı iş ve birebir aynı saat aralığında</strong> listelenir; Supervisor ve Teknisyen blokları farklı yerde başlayıp bitiyorsa bloklar, birbirinin sınırlarından bölünerek eşleştirilir.';
+    }
   }
+  updateQuickSettingsBar();
 }
 
 // Hassasiyet çubuğunun yazıya çevrilmiş hâli (özet satırı, sonuç başlığı ve yapay zeka verisi için).
@@ -103,19 +153,22 @@ function applyAlgoUI(){
     algoDesc.innerHTML = `<strong>Sol:</strong> personel mümkün olan en büyük senkron gruplarda toplanır; aynı gruptaki herkes bire bir aynı işleri bire bir aynı saat aralıklarında yapar, B1 onayları doğal bitişe göre dağılır. <strong>Sağ:</strong> B1 teknisyenin onay aralıkları düzenli olur, işlerin saatleri B1'e göre ayarlanır.<br>` +
       `Yalnızca <strong>bire bir aynı zaman aralıklarına aynı işleri alan</strong> kişiler aynı grupta listelenir; farklı saat aralığı alan personel ayrı grupta gösterilir. Algoritma aynı zaman aralıklarına aynı işleri mümkün olduğunca çok personele eşit şekilde dağıtır ve alternatif grup senaryolarını karşılaştırmalı olarak listeler. Her iki uçta da Supervisor denetimi, B1 onayı ve iş süresi sınırları aynen korunur.<br>${now}`;
   }
+  updateQuickSettingsBar();
 }
 
 function updateShiftSummary(){
-  const ss = $('shiftStart').value || '—';
-  const se = $('shiftEnd').value || '—';
-  const bs = $('breakStart').value;
-  const be = $('breakEnd').value;
-  const ts = $('teaBreakStart').value;
-  const te = $('teaBreakEnd').value;
+  const ss = $('shiftStart')?.value || '—';
+  const se = $('shiftEnd')?.value || '—';
+  const bs = $('breakStart')?.value;
+  const be = $('breakEnd')?.value;
+  const ts = $('teaBreakStart')?.value;
+  const te = $('teaBreakEnd')?.value;
   let breakStr = '';
   if (bs && be) breakStr += ` | Yemek ${bs}-${be}`;
   if (ts && te) breakStr += ` | Çay ${ts}-${te}`;
-  $('shiftSummary').textContent = `${ss} → ${se}${breakStr}`;
+  const sumEl = $('shiftSummary');
+  if (sumEl) sumEl.textContent = `${ss} → ${se}${breakStr}`;
+  updateQuickSettingsBar();
 }
 function updateB1Summary(){
   $('b1Summary').textContent = ($('headTech').value || '—');
@@ -321,6 +374,8 @@ function updateTasksStat(){
   const total = tasks.reduce((s,t)=> s + (parseFloat(t.hours)||0), 0);
   const openCount = tasks.filter(t => !!t.open).length;
   tasksStatDiv.innerHTML = `Toplam İş: <strong>${count}</strong> – Girdi Toplamı: <strong>${total.toFixed(2)} saat</strong>${openCount ? ` – OPEN: <strong>${openCount}</strong>` : ''}`;
+  const badge = $('tasksSummaryBadge');
+  if (badge) badge.textContent = `${count} İş • ${total.toFixed(2)} sa`;
 }
 
 function updateTechsStat(){
@@ -386,6 +441,8 @@ function updateTechsStat(){
     extra = `<br><span class="small">Supervisor: <strong>${sup}</strong> – Kalifiyeli: <strong>${qua}</strong> – Teknisyen: <strong>${reg}</strong></span>`;
   }
   techsStatDiv.innerHTML = `Toplam Teknisyen: <strong>${count}</strong> – Ortalama girdi yükü: <strong>${avgPerTech} saat</strong> – Dolu saatler sonrası vardiya kapasitesi: <strong>${netCapHours} saat</strong>${extra}`;
+  const tBadge = $('techsSummaryBadge');
+  if (tBadge) tBadge.textContent = `${count} Teknisyen • ${netCapHours} sa net`;
 }
 
 // ---- Initial render ----
@@ -405,6 +462,22 @@ updateB1Summary();
 updateBusySummary();
 
 // ---- Buttons ----
+$('openSettingsBtn')?.addEventListener('click', openSettingsModal);
+$('quickEditSettingsBtn')?.addEventListener('click', openSettingsModal);
+$('closeSettingsBtn')?.addEventListener('click', closeSettingsModal);
+$('saveSettingsBtn')?.addEventListener('click', closeSettingsModal);
+const settingsModalEl = $('settingsModal');
+if (settingsModalEl) {
+  settingsModalEl.addEventListener('click', e => {
+    if (e.target === settingsModalEl) closeSettingsModal();
+  });
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && settingsModalEl && !settingsModalEl.classList.contains('hidden')) {
+    closeSettingsModal();
+  }
+});
+
 $('addTask').addEventListener('click', ()=>{ tasks.push({ name:`NRC ${tasks.length+1}`, hours:1.0, open:false }); renderTasks(); });
 $('addTech').addEventListener('click', ()=>{ chosenScenario = ''; technicians.push(`Teknisyen ${technicians.length+1}`); techBlocks.push([]); normalizeTechPreAssignments(); techRoles.push('regular'); renderTechs(); renderTechBlocks(); });
 $('resetTasks').addEventListener('click', ()=>{ if(confirm('Tüm işleri sıfırlamak?')){ tasks=[]; techPreAssignments=[]; renderTasks(); }});
@@ -1027,7 +1100,7 @@ function plan(opts){
     return;
   }
 
-  if(!$('shiftStart').value || !$('shiftEnd').value){ resultsDiv.innerHTML = `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm font-medium text-rose-200">Vardiya başlangıç/bitiş saatlerini girin.</div>`; $('shiftDetails').open = true; return; }
+  if(!$('shiftStart').value || !$('shiftEnd').value){ resultsDiv.innerHTML = `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm font-medium text-rose-200">Vardiya başlangıç/bitiş saatlerini girin.</div>`; $('shiftDetails').open = true; openSettingsModal(); return; }
 
   if (planMode === 'group') {
     normalizeTechRoles();
@@ -1074,6 +1147,7 @@ function plan(opts){
   if (breakErrors.length) {
     resultsDiv.innerHTML = `<div class="warning rounded-2xl border border-rose-500/30 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 text-sm text-rose-200 space-y-1.5"><strong class="font-semibold text-rose-300">⛔ Mola saatleri geçersiz</strong>${breakErrors.map(message => `<div class="small text-xs text-rose-200/90">• ${escHtml(message)}</div>`).join('')}</div>`;
     $('shiftDetails').open = true;
+    openSettingsModal();
     return;
   }
   _totalBreakLen = _breaks.reduce((sum, b) => sum + b.len, 0);
@@ -3095,7 +3169,21 @@ function plan(opts){
   function scenarioBarHtml(view){
     const { list, picked, auto, recommended } = view;
     if (list.length < 2) {
-      return `<div class="card scn-card rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl px-4 py-3.5 sm:px-6 shadow-lg shadow-black/20"><div class="small text-xs sm:text-sm text-slate-300 leading-relaxed">🧩 Ekip düzeni: <strong class="font-semibold text-white">${escHtml(crewNames(picked.spec.crews))}</strong> <span class="text-slate-400">(bu girdilerle tek uygun dağıtım var)</span></div></div>`;
+      return `<details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-lg shadow-black/20 overflow-hidden open:border-slate-700/90" id="scenarioDetails" open>
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 sm:px-6 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+          <span class="font-display text-sm sm:text-base font-semibold text-sky-400 flex items-center gap-2">
+            <span>🧩</span>
+            <span>Ekip Düzeni</span>
+          </span>
+          <span class="flex items-center gap-2.5 shrink-0">
+            <span class="small truncate rounded-full border border-slate-700/70 bg-slate-800/70 px-2.5 py-0.5 text-xs font-medium text-slate-300">Tek Uygun Dağıtım</span>
+            ${chevronSvg}
+          </span>
+        </summary>
+        <div class="body border-t border-slate-800/80 px-4 py-3.5 sm:px-6 text-xs sm:text-sm text-slate-300 leading-relaxed">
+          Ekip düzeni: <strong class="font-semibold text-white">${escHtml(crewNames(picked.spec.crews))}</strong> <span class="text-slate-400">(bu girdilerle tek uygun dağıtım var)</span>
+        </div>
+      </details>`;
     }
     const chips = list.map((r, i) => {
       const m = r.metrics;
@@ -3106,12 +3194,23 @@ function plan(opts){
         <span class="scn-meta text-[11px] sm:text-xs text-slate-400 tabular-nums">Grup senkronu %${Math.round(m.groupSync * 100)} · Ekip içi aynılık %${Math.round(m.crewShare * 100)} · ${m.pieces} parça (kişi başı ${(m.active ? m.pieces / m.active : 0).toFixed(1).replace('.', ',')}) · B1 düzeni %${Math.round(m.regularity * 100)}${m.missing ? ` · <span class="text-amber-400 font-medium">${(m.missing / 60).toFixed(2)} sa atanamadı</span>` : ''}</span>
       </button>`;
     }).join('');
-    return `<div class="card scn-card rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl p-4 sm:p-6 shadow-xl shadow-black/25">
-      <h2 class="font-display text-base sm:text-lg font-semibold text-sky-400 flex items-center gap-2 mb-2">🎛️ Dağıtım Senaryoları</h2>
-      <div class="small text-xs sm:text-sm text-slate-400 leading-relaxed mb-3.5 [&_strong]:font-semibold [&_strong]:text-slate-200">Adam saat dağıtımı birden fazla ekip düzeniyle yapılabiliyor. Her teknisyen bir senaryoda tek bir ekipte yer alır ve ekipteki herkes aynı işi aynı saat aralığında yapar; ekip büyüklükleri işlerin süresine göre farklılaşır. ${auto ? 'Hassasiyet çubuğuna göre <strong>önerilen senaryo otomatik seçildi</strong>; isterseniz aşağıdan kendiniz seçebilirsiniz.' : 'Senaryoyu <strong>siz seçtiniz</strong>.'}</div>
-      <div class="scn-list grid grid-cols-1 md:grid-cols-2 gap-2.5">${chips}</div>
-      ${auto ? '' : `<button type="button" class="btn scn-auto mt-3.5 h-10 inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700/80 bg-slate-800/70 px-4 font-display text-xs sm:text-sm font-medium text-slate-200 hover:bg-slate-700 hover:text-white transition cursor-pointer" onclick="selectScenario('')">↺ Otomatik (önerilen) seçime dön</button>`}
-    </div>`;
+    return `<details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-xl shadow-black/25 overflow-hidden open:border-slate-700/90" id="scenarioDetails" open>
+      <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+        <span class="font-display text-base sm:text-lg font-semibold text-sky-400 flex items-center gap-2">
+          <span>🎛️</span>
+          <span>Dağıtım Senaryoları</span>
+        </span>
+        <span class="flex items-center gap-2.5 shrink-0">
+          <span class="small truncate rounded-full border border-slate-700/70 bg-slate-800/70 px-2.5 py-0.5 text-xs font-medium text-slate-300 tabular-nums">${list.length} Senaryo · ${auto ? 'Önerilen Seçili' : 'Özel Seçim'}</span>
+          ${chevronSvg}
+        </span>
+      </summary>
+      <div class="body border-t border-slate-800/80 p-4 sm:p-6">
+        <div class="small text-xs sm:text-sm text-slate-400 leading-relaxed mb-3.5 [&_strong]:font-semibold [&_strong]:text-slate-200">Adam saat dağıtımı birden fazla ekip düzeniyle yapılabiliyor. ${auto ? 'Hassasiyet çubuğuna göre <strong>önerilen senaryo otomatik seçildi</strong>; isterseniz aşağıdan kendiniz seçebilirsiniz.' : 'Senaryoyu <strong>siz seçtiniz</strong>.'}</div>
+        <div class="scn-list grid grid-cols-1 md:grid-cols-2 gap-2.5">${chips}</div>
+        ${auto ? '' : `<button type="button" class="btn scn-auto mt-3.5 h-10 inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700/80 bg-slate-800/70 px-4 font-display text-xs sm:text-sm font-medium text-slate-200 hover:bg-slate-700 hover:text-white transition cursor-pointer" onclick="selectScenario('')">↺ Otomatik (önerilen) seçime dön</button>`}
+      </div>
+    </details>`;
   }
 
   // Seçilen senaryoyu çizer (senaryo çubuğu, ekip kartları, B1 listesi, uyarılar).
@@ -3177,10 +3276,13 @@ function plan(opts){
       const preH = minutesToHoursStr(techPreAssignMinutes[i] || 0);
       return `<tr class="hover:bg-slate-800/30 transition-colors"><td class="px-2.5 sm:px-3.5 py-2.5 font-medium text-white"><div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2"><strong>${escHtml(name)}</strong>${role}</div></td><td class="px-2.5 sm:px-3.5 py-2.5 text-slate-300 tabular-nums whitespace-nowrap">${busyH}</td><td class="px-2.5 sm:px-3.5 py-2.5 text-slate-300 tabular-nums whitespace-nowrap">${preH}</td><td class="px-2.5 sm:px-3.5 py-2.5 font-semibold text-sky-300 tabular-nums whitespace-nowrap">${freeH}</td></tr>`;
     }).join('');
-    html += `<details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-lg shadow-black/20 overflow-hidden" open>
+    html += `<details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-lg shadow-black/20 overflow-hidden open:border-slate-700/90" id="capacityDetails" open>
       <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
         <span class="font-display text-sm sm:text-base font-semibold text-slate-100 flex items-center gap-2">⏱️ Teknisyen Net Kapasite Kontrolü</span>
-        ${chevronSvg}
+        <span class="flex items-center gap-2.5 shrink-0">
+          <span class="small rounded-full border border-slate-700/70 bg-slate-800/70 px-2.5 py-0.5 text-xs font-medium text-slate-300 tabular-nums">${minutesToHoursStr(totalCapacityMin)} sa net</span>
+          ${chevronSvg}
+        </span>
       </summary>
       <div class="body border-t border-slate-800/80 px-4 py-4 sm:px-6 sm:py-5">
         <div class="small text-xs sm:text-sm text-slate-400 mb-3">Dolu saatler iş ataması için kapalıdır ve toplam yüke eklenmez.</div>
@@ -3448,16 +3550,28 @@ function plan(opts){
       const headWorkTotal = allHeadSegs.reduce((s, seg) => s + (seg.end - seg.start), 0);
       const headOverflowTotal = headOverflowAssignments.reduce((s, h) => s + (h.end - h.start), 0);
       const headSupportTotal = headSupportAssignments.reduce((s, h) => s + (h.end - h.start), 0);
-      html += `<div class="card rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl p-4 sm:p-6 shadow-xl shadow-black/25 space-y-3">
-        <h2 class="font-display text-base sm:text-lg font-semibold text-sky-400 flex flex-wrap items-center gap-2">👑 B1 Teknisyen Zaman Listesi <span class="role-tag head inline-flex items-center rounded-lg border border-amber-500/30 bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-300">${escHtml(headTech || '—')}</span></h2>
-        <div class="small text-xs sm:text-sm text-slate-400">B1 için otomatik ayarlanan onay / B1-only zaman aralıkları aşağıdadır. Bu liste Supervisor Grup modunda da hesaplanır.</div>
-        ${headDisplayHtml}
-        <div class="stat rounded-xl border border-slate-800/80 border-l-4 border-l-amber-500 bg-amber-500/5 px-3.5 py-3 text-xs sm:text-sm text-slate-300 tabular-nums">
-          Toplam B1 yükü: <strong class="font-semibold text-white">${minutesToHoursStr(headWorkTotal)} saat</strong>
-          ${headOverflowTotal > 0 ? ` – B1’e özel atanan iş yükü: <strong class="font-semibold text-amber-300">${minutesToHoursStr(headOverflowTotal)} saat</strong>` : ''}
-          ${headSupportTotal > 0 ? ` – Kalan işe B1 iş desteği: <strong class="font-semibold text-amber-300">${minutesToHoursStr(headSupportTotal)} saat</strong>` : ''}
+      html += `<details class="collapsible group rounded-2xl border border-slate-800/90 bg-slate-900/75 backdrop-blur-xl shadow-xl shadow-black/25 overflow-hidden open:border-slate-700/90" id="b1Program" open>
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+          <span class="font-display text-base sm:text-lg font-semibold text-sky-400 flex flex-wrap items-center gap-2">
+            <span>👑</span>
+            <span>B1 Programı</span>
+            <span class="role-tag head inline-flex items-center rounded-lg border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-300">${escHtml(headTech || '—')}</span>
+          </span>
+          <span class="flex items-center gap-2.5 shrink-0">
+            <span class="small rounded-full border border-slate-700/70 bg-slate-800/70 px-2.5 py-0.5 text-xs font-medium text-slate-300 tabular-nums">Yük: ${minutesToHoursStr(headWorkTotal)} sa</span>
+            ${chevronSvg}
+          </span>
+        </summary>
+        <div class="body border-t border-slate-800/80 px-4 py-4 sm:px-6 sm:py-5 space-y-3">
+          <div class="small text-xs sm:text-sm text-slate-400">B1 için otomatik ayarlanan onay / B1-only zaman aralıkları aşağıdadır. Bu liste Supervisor Grup modunda da hesaplanır.</div>
+          ${headDisplayHtml}
+          <div class="stat rounded-xl border border-slate-800/80 border-l-4 border-l-amber-500 bg-amber-500/5 px-3.5 py-3 text-xs sm:text-sm text-slate-300 tabular-nums">
+            Toplam B1 yükü: <strong class="font-semibold text-white">${minutesToHoursStr(headWorkTotal)} saat</strong>
+            ${headOverflowTotal > 0 ? ` – B1’e özel atanan iş yükü: <strong class="font-semibold text-amber-300">${minutesToHoursStr(headOverflowTotal)} saat</strong>` : ''}
+            ${headSupportTotal > 0 ? ` – Kalan işe B1 iş desteği: <strong class="font-semibold text-amber-300">${minutesToHoursStr(headSupportTotal)} saat</strong>` : ''}
+          </div>
         </div>
-      </div>`;
+      </details>`;
     }
 
     if (isGroup) {
@@ -3608,31 +3722,41 @@ function plan(opts){
     };
 
     if (partialTasks.length > 0) {
-      html += '<div id="partialUnallocatedCard" class="attention rounded-2xl border border-amber-500/35 border-l-4 border-l-amber-500 bg-amber-500/10 p-4 sm:p-5 text-sm text-amber-200 shadow-xl space-y-3">' +
-        '<div class="flex items-center justify-between gap-2">' +
-          '<strong class="font-display text-sm sm:text-base font-semibold text-amber-300 flex items-center gap-2">' +
-            '<span>⚡</span>' +
-            '<span>Kısmen Atanan İşler</span>' +
-          '</strong>' +
-          '<span class="rounded-full border border-amber-500/30 bg-amber-500/20 px-2.5 py-0.5 text-xs font-semibold text-amber-300 tabular-nums">' + partialTasks.length + ' iş</span>' +
-        '</div>' +
-        '<div class="small text-xs text-amber-200/85">Bu işlere teknisyen veya B1 tarafından başlanmış, ancak vardiya/kapasite sınırı nedeniyle kalan saatler tamamlanamamıştır.</div>' +
-        makeUnallocTable(partialTasks, 'amber') +
-      '</div>';
+      html += `<details id="partialUnallocatedCard" class="collapsible group attention rounded-2xl border border-amber-500/35 border-l-4 border-l-amber-500 bg-slate-900/90 backdrop-blur-xl shadow-xl shadow-black/25 overflow-hidden open:border-amber-500/50" open>
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+          <strong class="font-display text-sm sm:text-base font-semibold text-amber-300 flex items-center gap-2">
+            <span>⚡</span>
+            <span>Kısmen Atanan İşler</span>
+          </strong>
+          <span class="flex items-center gap-2.5 shrink-0">
+            <span class="rounded-full border border-amber-500/30 bg-amber-500/20 px-2.5 py-0.5 text-xs font-semibold text-amber-300 tabular-nums">${partialTasks.length} iş</span>
+            ${chevronSvg}
+          </span>
+        </summary>
+        <div class="body border-t border-amber-500/20 px-4 py-4 sm:px-6 sm:py-5 space-y-3">
+          <div class="small text-xs text-amber-200/85">Bu işlere teknisyen veya B1 tarafından başlanmış, ancak vardiya/kapasite sınırı nedeniyle kalan saatler tamamlanamamıştır.</div>
+          ${makeUnallocTable(partialTasks, 'amber')}
+        </div>
+      </details>`;
     }
 
     if (completelyUnallocatedTasks.length > 0) {
-      html += '<div id="fullUnallocatedCard" class="warning rounded-2xl border border-rose-500/35 border-l-4 border-l-rose-500 bg-rose-500/10 p-4 sm:p-5 text-sm text-rose-200 shadow-xl space-y-3">' +
-        '<div class="flex items-center justify-between gap-2">' +
-          '<strong class="font-display text-sm sm:text-base font-semibold text-rose-300 flex items-center gap-2">' +
-            '<span>⚠️</span>' +
-            '<span>Tamamen Atanamayan İşler</span>' +
-          '</strong>' +
-          '<span class="rounded-full border border-rose-500/30 bg-rose-500/20 px-2.5 py-0.5 text-xs font-semibold text-rose-300 tabular-nums">' + completelyUnallocatedTasks.length + ' iş</span>' +
-        '</div>' +
-        '<div class="small text-xs text-rose-200/85">Kapasite yetersizliği nedeniyle bu vardiyada personele yerleştirilemeyen işler sonraki vardiyaya devretmiştir.</div>' +
-        makeUnallocTable(completelyUnallocatedTasks, 'rose') +
-      '</div>';
+      html += `<details id="fullUnallocatedCard" class="collapsible group warning rounded-2xl border border-rose-500/35 border-l-4 border-l-rose-500 bg-slate-900/90 backdrop-blur-xl shadow-xl shadow-black/25 overflow-hidden open:border-rose-500/50" open>
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4 select-none hover:bg-slate-800/30 transition-colors [&::-webkit-details-marker]:hidden">
+          <strong class="font-display text-sm sm:text-base font-semibold text-rose-300 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>Tamamen Atanamayan İşler</span>
+          </strong>
+          <span class="flex items-center gap-2.5 shrink-0">
+            <span class="rounded-full border border-rose-500/30 bg-rose-500/20 px-2.5 py-0.5 text-xs font-semibold text-rose-300 tabular-nums">${completelyUnallocatedTasks.length} iş</span>
+            ${chevronSvg}
+          </span>
+        </summary>
+        <div class="body border-t border-rose-500/20 px-4 py-4 sm:px-6 sm:py-5 space-y-3">
+          <div class="small text-xs text-rose-200/85">Kapasite yetersizliği nedeniyle bu vardiyada personele yerleştirilemeyen işler sonraki vardiyaya devretmiştir.</div>
+          ${makeUnallocTable(completelyUnallocatedTasks, 'rose')}
+        </div>
+      </details>`;
     }
 
     const aiData = {
