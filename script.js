@@ -312,6 +312,7 @@ function renderTasks(){
       <div class="list-item-row flex items-center gap-2 w-full">
         <input type="text" data-i="${i}" data-field="name" value="${escHtml(t.name)}" placeholder="İş Tanımı" class="h-9 sm:h-11 flex-1 min-w-0 rounded-xl border border-slate-700/80 bg-slate-950/80 px-3 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
         <input type="number" step="0.25" min="0" data-i="${i}" data-field="hours" value="${t.hours}" placeholder="Saat" class="h-9 sm:h-11 w-16 sm:w-24 shrink-0 rounded-xl border border-slate-700/80 bg-slate-950/80 px-2 text-center text-sm font-medium text-slate-100 tabular-nums placeholder-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
+        <input type="text" data-i="${i}" data-field="cardNo" value="${escHtml(t.cardNo || '')}" placeholder="Kart No" class="h-9 sm:h-11 w-16 sm:w-24 shrink-0 rounded-xl border border-slate-700/80 bg-slate-950/80 px-2 text-center text-sm font-medium text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 focus:outline-none transition">
         <label class="open-toggle h-9 w-9 sm:h-11 sm:w-11 shrink-0 inline-flex items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-base sm:text-lg leading-none cursor-pointer select-none hover:bg-amber-500/20 transition" title="OPEN iş: önce zorunlu işler yerleşir; bu iş kalan boş zamanları doldurmak için kullanılır.">
           <input type="checkbox" data-i="${i}" data-field="openTask" ${t.open ? 'checked' : ''}>
           <span class="emoji-open">📖</span>
@@ -478,9 +479,20 @@ document.addEventListener('keydown', e => {
   }
 });
 
-$('addTask').addEventListener('click', ()=>{ tasks.push({ name:`NRC ${tasks.length+1}`, hours:1.0, open:false }); renderTasks(); });
+$('addTask').addEventListener('click', ()=>{ tasks.push({ name:`NRC ${tasks.length+1}`, hours:1.0, open:false, cardNo:'' }); renderTasks(); });
 $('addTech').addEventListener('click', ()=>{ chosenScenario = ''; technicians.push(`Teknisyen ${technicians.length+1}`); techBlocks.push([]); normalizeTechPreAssignments(); techRoles.push('regular'); renderTechs(); renderTechBlocks(); });
 $('resetTasks').addEventListener('click', ()=>{ if(confirm('Tüm işleri sıfırlamak?')){ tasks=[]; techPreAssignments=[]; renderTasks(); }});
+
+// İş (NRC) adlarını ve kart numaralarını düz metin olarak panoya kopyalar; dağıtım algoritmasını etkilemez.
+if ($('copyNrcListBtn')) $('copyNrcListBtn').addEventListener('click', () => {
+  if (!tasks.length) { alert('Kopyalanacak iş yok.'); return; }
+  const lines = tasks.map((t, i) => {
+    const name = (t.name || '').trim() || `İş ${i + 1}`;
+    const cardNo = (t.cardNo || '').trim();
+    return cardNo ? `${name} - ${cardNo}` : name;
+  });
+  waCopy(lines.join('\n'), 'NRC ve kart no listesi kopyalandı!');
+});
 $('resetTechs').addEventListener('click', ()=>{ if(confirm('Tüm teknisyenleri sıfırlamak?')){ chosenScenario = ''; technicians=[]; techBlocks=[]; techRoles=[]; techPreAssignments=[]; renderTechs(); renderTechBlocks(); }});
 $('clearBreak').addEventListener('click', ()=>{ $('breakStart').value=''; $('breakEnd').value=''; breakStart=''; breakEnd=''; localStorage.removeItem('asdp_breakStart'); localStorage.removeItem('asdp_breakEnd'); updateShiftSummary(); updateTechsStat(); });
 if ($('clearTeaBreak')) $('clearTeaBreak').addEventListener('click', ()=>{ $('teaBreakStart').value=''; $('teaBreakEnd').value=''; teaBreakStart=''; teaBreakEnd=''; localStorage.removeItem('asdp_teaBreakStart'); localStorage.removeItem('asdp_teaBreakEnd'); updateShiftSummary(); updateTechsStat(); });
@@ -581,6 +593,7 @@ mainContainer.addEventListener('input', e => {
 
   if (f === 'name') tasks[i].name = e.target.value;
   if (f === 'hours') tasks[i].hours = parseFloat(e.target.value) || 0;
+  if (f === 'cardNo') tasks[i].cardNo = e.target.value;
   if (f === 'tech') technicians[i] = e.target.value;
   if (f === 'headblock-start') headBlocks[i].start = e.target.value;
   if (f === 'headblock-end') headBlocks[i].end = e.target.value;
@@ -591,6 +604,10 @@ mainContainer.addEventListener('input', e => {
     updateTechsStat();
     renderDupeWarning();
     if (f === 'name') renderPreAssigns();
+  }
+  if (f === 'cardNo') {
+    // Kart numarası dağıtımı/kapasiteyi etkilemez; yalnızca kaydedilir, istatistikler yeniden hesaplanmaz.
+    save('asdp_tasks', tasks);
   }
   if (f === 'tech') {
     save('asdp_techs', technicians);
@@ -3772,11 +3789,13 @@ function plan(opts){
       // Ekrandaki "📋 İşler" listesinin birebir karşılığı: her işe ayrılması gereken süre.
       is_listesi: tasks.map(t => ({
         is_no: t.name,
+        kart_no: t.cardNo || '',
         ayrilacak_sure_saat: parseFloat(t.hours) || 0,
         tip: t.open ? "OPEN" : "Zorunlu"
       })),
       is_bazinda_plan: tasks.map((t, i) => ({
         is_no: t.name,
+        kart_no: t.cardNo || '',
         girilen_sure: (parseFloat(t.hours) || 0).toFixed(2) + " saat",
         tip: t.open ? "OPEN" : "Zorunlu",
         teknisyen_atamalari: perTech.flatMap(p => p.segs

@@ -23,7 +23,7 @@
     };
   }
 </script>
-<link rel="stylesheet" href="style.css?v=20261104g"/>
+<link rel="stylesheet" href="style.css?v=20261105a"/>
 </head>
 <body class="mode-all min-h-screen text-slate-100 antialiased selection:bg-sky-500/30 selection:text-sky-200">
 <div class="container max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8 space-y-4 sm:space-y-5" id="container">
@@ -86,9 +86,16 @@
         </span>
       </summary>
       <div class="body border-t border-slate-800/80 p-4 sm:p-6 flex flex-col">
+        <div class="flex items-center justify-end pb-2">
+          <button type="button" id="copyNrcListBtn" class="inline-flex items-center justify-center gap-1.5 rounded-full border border-sky-500/35 bg-sky-500/10 hover:bg-sky-500 hover:text-white px-3.5 py-1.5 text-xs font-semibold text-sky-300 transition-all cursor-pointer [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:fill-current [&_svg]:shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+            <span>NRC + Kart No Kopyala</span>
+          </button>
+        </div>
         <div class="flex items-center gap-2 px-2 sm:px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 select-none">
           <span class="flex-1 min-w-0">İş Tanımı</span>
           <span class="w-16 sm:w-24 shrink-0 text-center">Saat</span>
+          <span class="w-16 sm:w-24 shrink-0 text-center">Kart No</span>
           <span class="w-9 sm:w-11 shrink-0 text-center" title="OPEN / Zorunlu İş">Tip</span>
           <span class="w-9 sm:w-11 shrink-0 text-center">Sil</span>
         </div>
@@ -435,6 +442,6 @@
   </div>
 </div>
 
-<script src="script.js?v=20261104g"></script>
+<script src="script.js?v=20261105a"></script>
 </body>
 </html>
